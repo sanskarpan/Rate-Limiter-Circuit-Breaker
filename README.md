@@ -378,6 +378,19 @@ docker-compose up    # demo server + Redis + Prometheus + Grafana
 
 ---
 
+## Guides & recipes
+
+- [docs/migration.md](docs/migration.md) — migrating from `golang.org/x/time/rate`
+  (rate limiting) and `sony/gobreaker` (circuit breaking): API-mapping tables and
+  before/after snippets.
+- [docs/cookbook/](docs/cookbook/index.md) — copy-pasteable, API-accurate recipes:
+  per-IP limiting in Gin/chi/echo/Fiber, per-tenant quotas, protecting a flaky
+  downstream (breaker + retry budget + hedge), distributed Redis limits with
+  fail-open, cost-weighted limiting, adaptive concurrency + load shedding, and
+  Prometheus + OpenTelemetry observability.
+
+---
+
 ## Documentation
 
 - [docs/algorithms.md](docs/algorithms.md) — per-algorithm theory, formulas, and properties
