@@ -54,6 +54,9 @@ func New(cfg Config) *CircuitBreaker {
 	default:
 		cb.countWin = newCountWindow(cfg.WindowSize)
 	}
+	// Seed the state gauge so a freshly-created breaker reports "closed" even
+	// before its first transition. (metric.Default() makes this a no-op.)
+	cb.cfg.Recorder.RecordCBState(cb.cfg.Name, StateClosed.String())
 	return cb
 }
 
@@ -83,6 +86,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func(context.Context) 
 	// that slot, regardless of any concurrent state transition (H-8).
 	acquiredProbe, err := cb.beforeExecute()
 	if err != nil {
+		cb.cfg.Recorder.IncCBResult(cb.cfg.Name, "rejected")
 		if cb.cfg.OnRejected != nil {
 			cb.cfg.OnRejected(cb.cfg.Name)
 		}
@@ -248,9 +252,15 @@ func (cb *CircuitBreaker) afterExecute(err error, duration time.Duration, ctx co
 		cb.halfOpenInflight.Add(-1)
 	}
 
+	// Emit observability signals for the outcome. ObserveCBExecution always fires
+	// (the call actually ran); the result counter partitions success vs failure.
+	// (metric.Default() makes both no-ops.)
+	cb.cfg.Recorder.ObserveCBExecution(cb.cfg.Name, duration)
 	if isFailure {
+		cb.cfg.Recorder.IncCBResult(cb.cfg.Name, "failure")
 		cb.recordFailure(state, duration, err)
 	} else {
+		cb.cfg.Recorder.IncCBResult(cb.cfg.Name, "success")
 		cb.recordSuccess(state, duration)
 	}
 }
@@ -355,9 +365,17 @@ func (cb *CircuitBreaker) transitionToOpen() {
 	// own decrement in afterExecute. Resetting to 0 would let those decrements
 	// drive the counter negative.
 	cb.consecutiveSuccesses.Store(0)
+	cb.recordTransition(current, StateOpen)
 	if cb.cfg.OnStateChange != nil {
 		cb.cfg.OnStateChange(cb.cfg.Name, current, StateOpen)
 	}
+}
+
+// recordTransition emits the state gauge and transition counter for a state
+// change from→to. Callers hold cb.mu. (metric.Default() makes this a no-op.)
+func (cb *CircuitBreaker) recordTransition(from, to State) {
+	cb.cfg.Recorder.RecordCBState(cb.cfg.Name, to.String())
+	cb.cfg.Recorder.IncCBTransition(cb.cfg.Name, from.String(), to.String())
 }
 
 // transitionToHalfOpen atomically transitions to HalfOpen.
@@ -372,6 +390,7 @@ func (cb *CircuitBreaker) transitionToHalfOpen() {
 	// calls), so the counter is already 0. Don't Store(0) (H-9) — it would risk
 	// clobbering a decrement from a straggler released after this transition.
 	cb.consecutiveSuccesses.Store(0)
+	cb.recordTransition(StateOpen, StateHalfOpen)
 	if cb.cfg.OnStateChange != nil {
 		cb.cfg.OnStateChange(cb.cfg.Name, StateOpen, StateHalfOpen)
 	}
@@ -397,6 +416,7 @@ func (cb *CircuitBreaker) transitionToClosed() {
 	default:
 		cb.countWin.reset()
 	}
+	cb.recordTransition(current, StateClosed)
 	if cb.cfg.OnStateChange != nil {
 		cb.cfg.OnStateChange(cb.cfg.Name, current, StateClosed)
 	}
