@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 // DistributedFixedWindow is a Redis-backed fixed window counter.
