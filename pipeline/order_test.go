@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
 )
 
 // TestBuild_EnforcesCanonicalOrder is the regression test for M-9: the package
