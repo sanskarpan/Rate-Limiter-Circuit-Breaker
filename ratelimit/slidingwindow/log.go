@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -41,6 +42,7 @@ type SlidingWindowLog struct {
 	window    time.Duration
 	idleClean time.Duration
 	clock     clock.Clock
+	rec       metric.Recorder
 
 	mu   sync.RWMutex
 	logs map[string]*keyLog
@@ -56,6 +58,17 @@ type LogOption func(*SlidingWindowLog)
 // WithLogClock sets the clock for testing.
 func WithLogClock(c clock.Clock) LogOption {
 	return func(l *SlidingWindowLog) { l.clock = c }
+}
+
+// WithLogRecorder wires a metric.Recorder so allow/deny decisions and decision
+// latency are emitted. Defaults to metric.Default() (a no-op) when unset. A nil
+// recorder is ignored.
+func WithLogRecorder(rec metric.Recorder) LogOption {
+	return func(l *SlidingWindowLog) {
+		if rec != nil {
+			l.rec = rec
+		}
+	}
 }
 
 // NewLog creates a SlidingWindowLog allowing limit requests per window.
@@ -76,6 +89,7 @@ func NewLog(limit int, window time.Duration, opts ...LogOption) *SlidingWindowLo
 		window:    window,
 		idleClean: window * 2,
 		clock:     clock.RealClock{},
+		rec:       metric.Default(),
 		logs:      make(map[string]*keyLog),
 		done:      make(chan struct{}),
 	}
@@ -93,7 +107,10 @@ func (l *SlidingWindowLog) Allow(ctx context.Context, key string) ratelimit.Resu
 }
 
 // AllowN checks if n requests are allowed in the current window.
-func (l *SlidingWindowLog) AllowN(_ context.Context, key string, n int) ratelimit.Result {
+func (l *SlidingWindowLog) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
+	start := l.clock.Now()
+	defer func() { l.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: logAlgorithmName}
 	}
@@ -103,6 +120,18 @@ func (l *SlidingWindowLog) AllowN(_ context.Context, key string, n int) ratelimi
 
 	kl := l.getOrCreate(key)
 	return l.consume(kl, n)
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (l *SlidingWindowLog) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		l.rec.IncAllowed(logAlgorithmName)
+	} else {
+		l.rec.IncDenied(logAlgorithmName)
+	}
+	l.rec.ObserveDecision(logAlgorithmName, l.clock.Now().Sub(start))
 }
 
 // Wait blocks until 1 request is allowed or ctx is cancelled.
