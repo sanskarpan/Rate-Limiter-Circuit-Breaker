@@ -11,11 +11,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	cbmw "github.com/sanskarpan/resilience/circuitbreaker/middleware"
-	"github.com/sanskarpan/resilience/internal/clock"
-	ratelimitmw "github.com/sanskarpan/resilience/ratelimit/middleware"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	cbmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 // echoServer is a minimal gRPC server for demonstration purposes.
