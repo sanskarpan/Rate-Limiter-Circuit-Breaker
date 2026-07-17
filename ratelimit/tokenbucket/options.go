@@ -5,10 +5,25 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
 // Option configures a TokenBucket.
 type Option func(*TokenBucket)
+
+// WithOnDecision registers a hook fired after every Allow/AllowN decision
+// (both allow and deny), receiving the key and the resulting Result. The
+// default is nil (a cheap no-op guarded by a nil check on the hot path). The
+// hook runs synchronously on the calling goroutine before the decision is
+// returned, so keep it fast and non-blocking; offload heavy work to a
+// goroutine or buffered channel. A nil hook is ignored.
+func WithOnDecision(fn func(key string, r ratelimit.Result)) Option {
+	return func(tb *TokenBucket) {
+		if fn != nil {
+			tb.onDecision = fn
+		}
+	}
+}
 
 // WithClock sets a custom clock for deterministic testing.
 func WithClock(c clock.Clock) Option {
