@@ -32,7 +32,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X github.com/sanskarpan/resilience/server/version.Version=${VERSION}" \
+            -ldflags="-s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version=${VERSION}" \
             -o bin/demo-server-linux-amd64 \
             ./server/
 
