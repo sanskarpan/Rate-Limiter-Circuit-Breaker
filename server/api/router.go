@@ -27,14 +27,6 @@ func defaultMetrics() *metrics.Metrics {
 	return serverMetrics
 }
 
-// Router holds the HTTP mux and all handlers.
-type Router struct {
-	mux      *http.ServeMux
-	handlers *Handlers
-	hub      *Hub
-	logger   *slog.Logger
-}
-
 // NewRouter constructs the router, registers all routes and wraps middleware.
 func NewRouter(
 	limiters map[string]ratelimit.Limiter,
