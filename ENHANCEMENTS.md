@@ -13,6 +13,16 @@ Netflix `concurrency-limits`, and the Stripe/Shopify GCRA writeups.
 
 ---
 
+> ## ✅ Implementation status
+>
+> **All 15 top-priority items are implemented, tested, and merged**, plus a P2 batch
+> (§1.4 distributed circuit breaker, §1.10 cache-aside fallback, §4.6 bulkhead saturation
+> metrics, §6.1 property-based testing, §7.6 gosec/revive/depguard). Completed subsections
+> are marked `✅ Implemented & merged` below. `main` CI is green across build/vet/`test -race`/
+> golangci-lint(0)/verify-zero-deps/real-Redis integration/Playwright e2e/contrib.
+>
+> Remaining: the rest of the P2 backlog and P3 nice-to-haves.
+
 ## Table of Contents
 
 - [Executive Summary](#executive-summary)
@@ -120,7 +130,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 1. Missing Algorithms & Patterns
 
-### 1.1 Concurrency limiter (Netflix AIMD / Gradient2 / Vegas)
+### 1.1 Concurrency limiter (Netflix AIMD / Gradient2 / Vegas)  
+> ✅ **Implemented & merged** (item 5)
 - **Category:** Algorithms · **Priority:** P1 · **Effort:** L
 - **Rationale:** Rate limits cap *request rate*; a concurrency limiter caps *in-flight work*
   adaptively from measured latency/RTT, which is the single most effective defense against
@@ -149,7 +160,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **References:** Netflix `concurrency-limits` (Gradient2/Vegas), TCP Vegas paper,
   Google SRE "Handling Overload".
 
-### 1.2 Load shedder (CoDel-style + priority-aware admission)
+### 1.2 Load shedder (CoDel-style + priority-aware admission)  
+> ✅ **Implemented & merged** (item 11)
 - **Category:** Algorithms · **Priority:** P1 · **Effort:** L
 - **Rationale:** When saturated, dropping *the right* requests (low-priority, or those that
   have already queued too long) preserves goodput far better than a flat limit. CoDel-style
@@ -166,7 +178,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **References:** Kathleen Nichols & Van Jacobson "Controlling Queue Delay" (CoDel),
   Google SRE overload chapter, Envoy adaptive concurrency filter.
 
-### 1.3 Retry budget (retry-storm guard)
+### 1.3 Retry budget (retry-storm guard)  
+> ✅ **Implemented & merged** (item 6)
 - **Category:** Algorithms · **Priority:** P1 · **Effort:** M
 - **Rationale:** Unbudgeted retries amplify load exactly when a dependency is failing,
   turning a brownout into an outage. Every mature stack (Polly, Hystrix, Envoy, gRPC) caps
@@ -186,7 +199,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   needs per-target scoping to avoid one hot key starving others.
 - **References:** Envoy retry budgets, gRPC `retryThrottling`, Google SRE retry amplification.
 
-### 1.4 Distributed circuit breaker
+### 1.4 Distributed circuit breaker  
+> ✅ **Implemented & merged** (P2)
 - **Category:** Algorithms / Distributed · **Priority:** P2 · **Effort:** L
 - **Rationale:** In a fleet, each instance learns a dependency is down independently and
   slowly. Shared breaker state (or shared failure counters) trips the whole fleet fast and
@@ -202,7 +216,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   on store failure (mirror the fail-open pattern in `store/redis.go`).
 - **References:** resilience4j distributed state, mercari/go-circuitbreaker, Polly.
 
-### 1.5 Rate-limit-by-cost / weight
+### 1.5 Rate-limit-by-cost / weight  
+> ✅ **Implemented & merged** (item 7)
 - **Category:** Algorithms / API · **Priority:** P1 · **Effort:** M
 - **Rationale:** Real APIs charge different costs (a bulk write ≠ a health check). GitHub,
   Stripe, and Shopify all bill in weighted "points". `AllowN(n)` technically models this but
@@ -269,7 +284,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** Scope creep — keep minimal; clearly distinct from rate limiting.
 - **References:** Lodash debounce/throttle semantics.
 
-### 1.10 Cache-aside / stale-fallback pattern
+### 1.10 Cache-aside / stale-fallback pattern  
+> ✅ **Implemented & merged** (P2)
 - **Category:** Algorithms · **Priority:** P2 · **Effort:** M
 - **Rationale:** The most common real fallback is "serve last-known-good value on failure",
   which the current fallback package cannot express without user plumbing.
@@ -316,7 +332,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 2. API & Ergonomics
 
-### 2.1 Rate-limiter event hooks (`OnAllowed` / `OnDenied` / `OnWait`)
+### 2.1 Rate-limiter event hooks (`OnAllowed` / `OnDenied` / `OnWait`)  
+> ✅ **Implemented & merged** (item 9)
 - **Category:** API / Observability · **Priority:** P1 · **Effort:** S
 - **Rationale:** The circuit breaker exposes rich callbacks (`OnStateChange`, `OnSuccess`,
   `OnFailure`, `OnRejected`, `config.go:73-83`) but **rate limiters expose none** — consumers
@@ -362,7 +379,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   functions — a small naming asymmetry. Document it.
 - **References:** samber/mo, resilience4j `Supplier<T>`.
 
-### 2.4 Framework middleware: chi, gin, echo, fiber, connect
+### 2.4 Framework middleware: chi, gin, echo, fiber, connect  
+> ✅ **Implemented & merged** (item 8)
 - **Category:** API · **Priority:** P1 · **Effort:** M
 - **Rationale:** Middleware exists only for stdlib `net/http` (`ratelimit/middleware/http.go`,
   `circuitbreaker/middleware/http.go`) and gRPC. The majority of Go HTTP services use chi/gin/
@@ -501,7 +519,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 4. Observability
 
-### 4.1 Wire real metrics into the library core via a `Recorder` interface
+### 4.1 Wire real metrics into the library core via a `Recorder` interface  
+> ✅ **Implemented & merged** (item 1)
 - **Category:** Observability · **Priority:** **P0** · **Effort:** L
 - **Rationale:** This is the #1 credibility gap. The library core emits **zero** metrics:
   Prometheus counters are declared in `server/metrics/prometheus.go:10-60` but the rate-limit
@@ -521,7 +540,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   `middleware.go:105-147`; apply the same discipline).
 - **References:** OTel Go Meter API, Prometheus client_golang, RED/USE methodology.
 
-### 4.2 Real OpenTelemetry tracing (replace the stub)
+### 4.2 Real OpenTelemetry tracing (replace the stub)  
+> ✅ **Implemented & merged** (item 3)
 - **Category:** Observability · **Priority:** **P0** · **Effort:** M
 - **Rationale:** `server/telemetry/tracer.go` is an explicit no-op stub (all spans do nothing,
   `tracer.go:16-49`; `Shutdown` returns nil, line 49). There is no real span creation, no
@@ -535,7 +555,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   core stays zero-dep.
 - **References:** OpenTelemetry Go SDK, OTel semantic conventions, exemplars spec.
 
-### 4.3 Fix the Grafana dashboard ↔ emitted-metric mismatch
+### 4.3 Fix the Grafana dashboard ↔ emitted-metric mismatch  
+> ✅ **Implemented & merged** (item 4)
 - **Category:** Observability · **Priority:** **P0** · **Effort:** S
 - **Rationale:** The shipped dashboard (`deploy/grafana/dashboards/resilience.json`) queries
   ~10 series that are **never emitted**: `resilience_ratelimit_decision_duration_seconds_bucket`,
@@ -576,7 +597,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Prometheus server.
 - **References:** Prometheus exemplars, native histograms.
 
-### 4.6 Bulkhead queue/wait metrics (RED/USE saturation)
+### 4.6 Bulkhead queue/wait metrics (RED/USE saturation)  
+> ✅ **Implemented & merged** (P2)
 - **Category:** Observability · **Priority:** P2 · **Effort:** S
 - **Rationale:** Bulkhead exposes only `Inflight()` and `Rejected()` (`bulkhead.go:86-95`) — no
   **queue depth**, no **wait-time** distribution. Saturation is the "U" in USE and the key
@@ -601,7 +623,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 5. Distributed Correctness
 
-### 5.1 Redis clock-skew mitigation (server `TIME`, skew detection)
+### 5.1 Redis clock-skew mitigation (server `TIME`, skew detection)  
+> ✅ **Implemented & merged** (item 10)
 - **Category:** Distributed · **Priority:** P1 · **Effort:** M
 - **Rationale:** **Every** Lua script uses **client-supplied `now`** (token bucket
   `redis.go:369`, GCRA `redis.go:436`, sliding-window-log `redis.go:516`). If application
@@ -684,7 +707,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 6. Testing & Quality
 
-### 6.1 Property-based testing (rapid/gopter)
+### 6.1 Property-based testing (rapid/gopter)  
+> ✅ **Implemented & merged** (P2)
 - **Category:** Testing · **Priority:** P2 · **Effort:** M
 - **Rationale:** There is native fuzzing (`ratelimit/tokenbucket/fuzz_test.go`,
   `ratelimit/gcra/fuzz_test.go`) and a chaos harness (`internal/testutil/chaos.go`), but **no
@@ -735,7 +759,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** e2e needs both servers — use Playwright `webServer` to orchestrate.
 - **References:** Playwright CI recipe, Vitest.
 
-### 6.5 Benchmark regression gate in CI (benchstat)
+### 6.5 Benchmark regression gate in CI (benchstat)  
+> ✅ **Implemented & merged** (item 14)
 - **Category:** Testing / Performance · **Priority:** P1 · **Effort:** M
 - **Rationale:** `make bench-compare OLD=main NEW=HEAD` exists and uses `benchstat`, but **CI
   never runs it** — performance regressions can merge unnoticed, undermining the "0 allocs,
@@ -774,7 +799,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 7. Security & Hardening
 
-### 7.1 `govulncheck` in CI
+### 7.1 `govulncheck` in CI  
+> ✅ **Implemented & merged** (item 2)
 - **Category:** Security · **Priority:** **P0** · **Effort:** S
 - **Rationale:** No dependency vulnerability scanning exists anywhere. The library pulls
   Redis/gRPC/Prometheus transitively (`go.mod`); a CVE in any of them ships silently.
@@ -785,7 +811,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   `osv-scanner` for the frontend `npm` tree.
 - **References:** `golang.org/x/vuln/cmd/govulncheck`, OSV-Scanner.
 
-### 7.2 Supply-chain: SBOM + cosign signing + SLSA provenance
+### 7.2 Supply-chain: SBOM + cosign signing + SLSA provenance  
+> ✅ **Implemented & merged** (item 12)
 - **Category:** Security / Release · **Priority:** P1 · **Effort:** M
 - **Rationale:** `release.yml` builds raw binaries with no SBOM, no signatures, no provenance.
   Regulated/enterprise adopters increasingly require these. It's a differentiator for a
@@ -832,7 +859,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   bounds server-side.
 - **References:** Go fuzzing, defensive input validation.
 
-### 7.6 Enable security/quality linters (gosec, revive, depguard)
+### 7.6 Enable security/quality linters (gosec, revive, depguard)  
+> ✅ **Implemented & merged** (P2)
 - **Category:** Security / Quality · **Priority:** P2 · **Effort:** S
 - **Rationale:** `.golangci.yml` enables only six linters (`errcheck, govet, ineffassign,
   misspell, staticcheck, unused`) with `default: none`. No `gosec` (security), no `depguard`
@@ -846,7 +874,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 8. DX & Docs
 
-### 8.1 Migration guides (from `x/time/rate` and `gobreaker`)
+### 8.1 Migration guides (from `x/time/rate` and `gobreaker`)  
+> ✅ **Implemented & merged** (item 15)
 - **Category:** Docs · **Priority:** P1 · **Effort:** M
 - **Rationale:** Adoption is a switching cost. The two libraries people migrate *from* are
   `golang.org/x/time/rate` (rate limiting) and `sony/gobreaker` (breaker). A side-by-side
@@ -858,7 +887,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   → `circuitbreaker.New(Config{...})`).
 - **References:** how ent/gorm/zap document migrations.
 
-### 8.2 Recipe cookbook (framework + scenario recipes)
+### 8.2 Recipe cookbook (framework + scenario recipes)  
+> ✅ **Implemented & merged** (item 15)
 - **Category:** Docs / DX · **Priority:** P1 · **Effort:** M
 - **Rationale:** Users copy recipes, not APIs. "Rate limit per IP in Gin", "per-tenant quotas",
   "protect a flaky downstream with breaker+retry+hedge", "distributed limit with Redis
@@ -926,7 +956,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 9. Operability & Release
 
-### 9.1 Adopt goreleaser
+### 9.1 Adopt goreleaser  
+> ✅ **Implemented & merged** (item 13)
 - **Category:** Release · **Priority:** P1 · **Effort:** M
 - **Rationale:** `release.yml` hand-rolls a 4-platform build matrix + `gh-release`. goreleaser
   gives multi-arch binaries, checksums, SBOMs, cosign signing, Docker manifests, Homebrew taps,
@@ -937,7 +968,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   SBOM, plus Docker manifest push and a Homebrew tap.
 - **References:** goreleaser docs.
 
-### 9.2 Multi-arch Docker image build + registry push
+### 9.2 Multi-arch Docker image build + registry push  
+> ✅ **Implemented & merged** (item 13)
 - **Category:** Release · **Priority:** P1 · **Effort:** S
 - **Rationale:** The `Dockerfile` is already well-hardened (distroless nonroot, `CGO_ENABLED=0`,
   healthcheck) but **no CI publishes it** — release ships binaries only. Users can't `docker
@@ -948,7 +980,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   with cosign (§7.2).
 - **References:** docker buildx, GHCR.
 
-### 9.3 Helm chart
+### 9.3 Helm chart  
+> ✅ **Implemented & merged** (item 13)
 - **Category:** Release · **Priority:** P2 · **Effort:** M
 - **Rationale:** `deploy/kubernetes/` has raw manifests (deployment/service/hpa/pdb/configmap,
   well-hardened: nonroot, read-only rootfs, dropped caps) but **no Helm chart**, so it isn't
