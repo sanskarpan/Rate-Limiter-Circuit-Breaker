@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/bulkhead"
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/internal/clock"
-	"github.com/sanskarpan/resilience/pipeline"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
-	"github.com/sanskarpan/resilience/retry"
-	"github.com/sanskarpan/resilience/retry/backoff"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 var errDownstream = errors.New("downstream error")
