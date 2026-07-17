@@ -95,14 +95,13 @@ dockers:
       - demo-server
     goos: linux
     goarch: amd64
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     use: buildx
     image_templates:
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-amd64"
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
-      - "--build-arg=VERSION={{ .Version }}"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -113,14 +112,13 @@ dockers:
       - demo-server
     goos: linux
     goarch: arm64
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     use: buildx
     image_templates:
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-arm64"
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
-      - "--build-arg=VERSION={{ .Version }}"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
