@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -56,6 +57,12 @@ type CompositeLimiter struct {
 	// that goes *through this composite*; if the underlying limiters are also
 	// consumed directly elsewhere, atomicity across the chain is not guaranteed.
 	mu sync.Mutex
+
+	// clock drives WaitN's retry timer. It defaults to the real clock; inject a
+	// mock clock (WithClock) so WaitN is deterministic under a manual clock —
+	// otherwise WaitN would sleep on real wall time while the underlying limiters
+	// advance on the injected clock, and never observe refilled tokens (F-2).
+	clock clock.Clock
 }
 
 // New creates a CompositeLimiter combining the given limiters.
@@ -63,7 +70,16 @@ func New(mode Mode, limiters ...ratelimit.Limiter) *CompositeLimiter {
 	return &CompositeLimiter{
 		limiters: limiters,
 		mode:     mode,
+		clock:    clock.RealClock{},
 	}
+}
+
+// WithClock sets the clock used by WaitN's retry timer and returns the limiter
+// for chaining. Use a ManualClock in tests so WaitN wakes deterministically when
+// the clock is advanced. Not safe to call concurrently with WaitN.
+func (c *CompositeLimiter) WithClock(clk clock.Clock) *CompositeLimiter {
+	c.clock = clk
+	return c
 }
 
 // Allow checks if 1 request is allowed. Non-blocking.
@@ -201,15 +217,17 @@ func (c *CompositeLimiter) WaitN(ctx context.Context, key string, n int) error {
 		if wait <= 0 {
 			wait = time.Millisecond
 		}
+		timer := c.clock.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return &ratelimit.RateLimitError{
 				Algorithm:  c.algorithm(),
 				Key:        key,
 				RetryAfter: wait,
 				Err:        ratelimit.ErrContextDone,
 			}
-		case <-time.After(wait):
+		case <-timer.C():
 			// retry
 		}
 	}
