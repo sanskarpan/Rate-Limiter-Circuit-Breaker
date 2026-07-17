@@ -23,17 +23,17 @@ type grpcMockLimiter struct {
 	result ratelimit.Result
 }
 
-func (m *grpcMockLimiter) Allow(_ context.Context, _ string) ratelimit.Result  { return m.result }
+func (m *grpcMockLimiter) Allow(_ context.Context, _ string) ratelimit.Result { return m.result }
 func (m *grpcMockLimiter) AllowN(_ context.Context, _ string, _ int) ratelimit.Result {
 	return m.result
 }
-func (m *grpcMockLimiter) Wait(_ context.Context, _ string) error   { return nil }
+func (m *grpcMockLimiter) Wait(_ context.Context, _ string) error         { return nil }
 func (m *grpcMockLimiter) WaitN(_ context.Context, _ string, _ int) error { return nil }
 func (m *grpcMockLimiter) Peek(_ context.Context, _ string) ratelimit.State {
 	return ratelimit.State{}
 }
 func (m *grpcMockLimiter) Reset(_ context.Context, _ string) error { return nil }
-func (m *grpcMockLimiter) Close() error                             { return nil }
+func (m *grpcMockLimiter) Close() error                            { return nil }
 
 var noopUnaryHandler grpc.UnaryHandler = func(ctx context.Context, req any) (any, error) {
 	return "response", nil
@@ -206,11 +206,13 @@ func (c *captureKeyLimiter) Allow(_ context.Context, key string) ratelimit.Resul
 func (c *captureKeyLimiter) AllowN(_ context.Context, key string, _ int) ratelimit.Result {
 	return c.Allow(context.Background(), key)
 }
-func (c *captureKeyLimiter) Wait(_ context.Context, _ string) error            { return nil }
-func (c *captureKeyLimiter) WaitN(_ context.Context, _ string, _ int) error   { return nil }
-func (c *captureKeyLimiter) Peek(_ context.Context, _ string) ratelimit.State { return ratelimit.State{} }
-func (c *captureKeyLimiter) Reset(_ context.Context, _ string) error          { return nil }
-func (c *captureKeyLimiter) Close() error                                      { return nil }
+func (c *captureKeyLimiter) Wait(_ context.Context, _ string) error         { return nil }
+func (c *captureKeyLimiter) WaitN(_ context.Context, _ string, _ int) error { return nil }
+func (c *captureKeyLimiter) Peek(_ context.Context, _ string) ratelimit.State {
+	return ratelimit.State{}
+}
+func (c *captureKeyLimiter) Reset(_ context.Context, _ string) error { return nil }
+func (c *captureKeyLimiter) Close() error                            { return nil }
 
 // TestGRPC_KeyByMetadata_FallbackEmpty verifies empty string when metadata absent.
 func TestGRPC_KeyByMetadata_FallbackEmpty(t *testing.T) {
