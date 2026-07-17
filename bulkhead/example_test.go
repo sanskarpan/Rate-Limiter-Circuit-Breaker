@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/bulkhead"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 )
 
 // ExampleNew demonstrates creating a Bulkhead and executing requests through it.
