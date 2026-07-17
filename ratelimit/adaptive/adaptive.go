@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
@@ -65,6 +66,7 @@ type AdaptiveLimiter struct {
 	inner *tokenbucket.TokenBucket
 
 	clock   clock.Clock
+	rec     metric.Recorder
 	done    chan struct{}
 	wg      sync.WaitGroup
 	closed  bool
@@ -106,6 +108,7 @@ func New(initialLimit, minLimit, maxLimit int, signals SignalSource, opts ...Opt
 		maxLimit:       maxLimit,
 		adjustInterval: time.Second,
 		clock:          clock.RealClock{},
+		rec:            metric.Default(),
 		done:           make(chan struct{}),
 		p99Warn:        100 * time.Millisecond,
 		p99Critical:    500 * time.Millisecond,
@@ -123,22 +126,33 @@ func New(initialLimit, minLimit, maxLimit int, signals SignalSource, opts ...Opt
 
 // Allow checks if 1 request is allowed. Non-blocking.
 func (al *AdaptiveLimiter) Allow(ctx context.Context, key string) ratelimit.Result {
-	// inner is immutable after New (SetLimit retunes it in place), so no lock needed.
-	inner := al.inner
-	result := inner.Allow(ctx, key)
-	result.Algorithm = algorithmName
-	result.Limit = int(al.currentLimit.Load())
-	return result
+	return al.AllowN(ctx, key, 1)
 }
 
 // AllowN checks if n requests are allowed. Non-blocking.
 func (al *AdaptiveLimiter) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
+	start := al.clock.Now()
 	// inner is immutable after New (SetLimit retunes it in place), so no lock needed.
+	// inner's own recorder is the default Nop, so it does not double-count; the
+	// adaptive limiter reports the decision under its own "adaptive" algorithm.
 	inner := al.inner
 	result := inner.AllowN(ctx, key, n)
 	result.Algorithm = algorithmName
 	result.Limit = int(al.currentLimit.Load())
+	al.record(result, start)
 	return result
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (al *AdaptiveLimiter) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		al.rec.IncAllowed(algorithmName)
+	} else {
+		al.rec.IncDenied(algorithmName)
+	}
+	al.rec.ObserveDecision(algorithmName, al.clock.Now().Sub(start))
 }
 
 // Wait blocks until 1 token is available or ctx is cancelled.
