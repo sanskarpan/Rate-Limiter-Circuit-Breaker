@@ -3,7 +3,7 @@ package circuitbreaker
 import (
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 )
 
 // Config configures a CircuitBreaker.
