@@ -13,7 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	metricprom "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric/prometheus"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/observability/otel"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
@@ -41,25 +45,61 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Tracing (OpenTelemetry) ──────────────────────────────────────────────
+	// Real OTel path (replaces the old no-op stub). Enabled via OTEL_ENABLED=true;
+	// exporter selectable via OTEL_EXPORTER (otlp|stdout|none) and OTEL_ENDPOINT.
+	// When disabled, no provider is installed and the otelhttp middleware falls
+	// back to the global no-op tracer (zero overhead).
+	if os.Getenv("OTEL_ENABLED") == "true" {
+		exporter := os.Getenv("OTEL_EXPORTER")
+		if exporter == "" {
+			exporter = "stdout"
+		}
+		tp, terr := otel.New(context.Background(), otel.Config{
+			ServiceName:    version.Name,
+			ServiceVersion: version.Version,
+			Exporter:       exporter,
+			Endpoint:       os.Getenv("OTEL_ENDPOINT"),
+			SampleRatio:    1.0,
+		})
+		if terr != nil {
+			logger.Error("failed to init tracing", "error", terr)
+		} else {
+			logger.Info("tracing enabled", "exporter", exporter)
+			defer func() {
+				sctx, scancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer scancel()
+				_ = tp.Shutdown(sctx)
+			}()
+		}
+	}
+
+	// ── Metrics recorder ─────────────────────────────────────────────────────
+	// Register the library-core metrics on the default Prometheus registry so
+	// they are exposed by the same promhttp handler that serves /metrics. This
+	// wires REAL rate-limit / circuit-breaker / bulkhead series (the ones the
+	// Grafana dashboard queries) instead of leaving them empty.
+	rec := metricprom.New(prometheus.DefaultRegisterer)
+
 	// ── Rate limiters ────────────────────────────────────────────────────────
 	limiters := map[string]ratelimit.Limiter{
 		// token_bucket: 10 req/s, burst=20
-		"token_bucket": tokenbucket.New(20, 10),
+		"token_bucket": tokenbucket.New(20, 10, tokenbucket.WithRecorder(rec)),
 
 		// fixed_window: 10 req / 10s
-		"fixed_window": fixedwindow.New(10, 10*time.Second),
+		"fixed_window": fixedwindow.New(10, 10*time.Second, fixedwindow.WithRecorder(rec)),
 
 		// sliding_window_log: 10 req / 10s
-		"sliding_window_log": slidingwindow.NewLog(10, 10*time.Second),
+		"sliding_window_log": slidingwindow.NewLog(10, 10*time.Second, slidingwindow.WithLogRecorder(rec)),
 
 		// sliding_window_counter: 10 req / 10s
-		"sliding_window_counter": slidingwindow.NewCounter(10, 10*time.Second),
+		"sliding_window_counter": slidingwindow.NewCounter(10, 10*time.Second, slidingwindow.WithCounterRecorder(rec)),
 
 		// gcra: 10 req/s, burst=5
-		"gcra": gcra.New(10, 5, time.Second),
+		"gcra": gcra.New(10, 5, time.Second, gcra.WithRecorder(rec)),
 
 		// leaky_bucket: leak rate 10 req/s, queue capacity 20
-		"leaky_bucket": leakybucket.New(20, 10),
+		"leaky_bucket": leakybucket.New(20, 10, leakybucket.WithRecorder(rec)),
 	}
 
 	// ── Circuit breakers ─────────────────────────────────────────────────────
@@ -73,6 +113,7 @@ func main() {
 			WindowSize:       10,
 			FailureThreshold: 5,
 			OpenTimeout:      30 * time.Second,
+			Recorder:         rec,
 		})
 		cbs[name] = cb
 	}

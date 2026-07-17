@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
 
 // Config configures a CircuitBreaker.
@@ -84,6 +85,25 @@ type Config struct {
 
 	// Clock is the time source (override for testing).
 	Clock clock.Clock
+
+	// Recorder receives observability events (state gauge, result counters,
+	// execution latency, transition counters). Defaults to metric.Default() (a
+	// no-op) when nil, so the breaker stays observability-agnostic and
+	// allocation-free unless an adapter is wired. Prefer WithRecorder to set it.
+	Recorder metric.Recorder
+}
+
+// WithRecorder returns a copy of the Config with the metric.Recorder set. It is
+// a small ergonomic helper for the common wiring pattern
+//
+//	cb := circuitbreaker.New(cfg.WithRecorder(rec))
+//
+// A nil recorder leaves the config unchanged (defaults apply).
+func (c Config) WithRecorder(rec metric.Recorder) Config {
+	if rec != nil {
+		c.Recorder = rec
+	}
+	return c
 }
 
 // defaults applies default values for unset fields.
@@ -120,6 +140,9 @@ func (c *Config) defaults() {
 	}
 	if c.IsFailure == nil {
 		c.IsFailure = defaultIsFailure
+	}
+	if c.Recorder == nil {
+		c.Recorder = metric.Default()
 	}
 }
 

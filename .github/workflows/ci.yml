@@ -12,7 +12,7 @@ permissions:
 env:
   # Primary Go version (matches the go.mod floor). Used by non-matrix jobs and
   # as the single matrix entry that uploads coverage.
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25"
 
 jobs:
   # ─── Unit tests (Go version matrix) ─────────────────────────────────────────
@@ -24,9 +24,9 @@ jobs:
       # which specific versions break.
       fail-fast: false
       matrix:
-        # go.mod floor ("1.24") plus the two most recent releases. Coverage is
+        # go.mod floor ("1.25", raised by the optional OTel adapter) plus the latest release. Coverage is
         # uploaded only from the primary version (see condition below).
-        go-version: ["1.24", "1.25", "1.26"]
+        go-version: ["1.25", "1.26"]
     steps:
       - uses: actions/checkout@v7
 
@@ -154,6 +154,115 @@ jobs:
         env:
           REDIS_ADDR: localhost:6379
         run: go test -tags=integration -race -count=1 ./...
+
+  # ─── Vulnerability scan (govulncheck) ───────────────────────────────────────
+  govulncheck:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          # Use the version declared in go.mod so the scan matches our toolchain.
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run govulncheck
+        # Fails CI if a known, reachable vulnerability is found in any package.
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # ─── End-to-end (Playwright against live server + frontend) ──────────────────
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # E2E is heavier and does not need Redis; run it on the main branch and PRs.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    env:
+      # Demo server: no API_KEY so control endpoints stay open for the tests.
+      PORT: "8080"
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ── Build & start the Go demo server on :8080 ──────────────────────────
+      - name: Build demo server
+        working-directory: .
+        run: CGO_ENABLED=0 go build -o bin/demo-server ./server/
+
+      - name: Start demo server (background)
+        working-directory: .
+        run: |
+          ./bin/demo-server > /tmp/demo-server.log 2>&1 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for demo server /health/live
+        working-directory: .
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health/live > /dev/null 2>&1; then
+              echo "demo server is live"; exit 0
+            fi
+            sleep 1
+          done
+          echo "demo server did not become healthy in time"; cat /tmp/demo-server.log; exit 1
+
+      # ── Build & start the Next.js frontend on :3000 ────────────────────────
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Start frontend (background)
+        run: |
+          npm run start > /tmp/frontend.log 2>&1 &
+          echo "FRONTEND_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for frontend :3000
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+              echo "frontend is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "frontend did not become ready in time"; cat /tmp/frontend.log; exit 1
+
+      # ── Run Playwright end-to-end tests ────────────────────────────────────
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ─── Frontend (Next.js playground) ──────────────────────────────────────────
   frontend:

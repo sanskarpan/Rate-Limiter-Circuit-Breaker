@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -65,6 +66,7 @@ type LeakyBucket struct {
 	queues map[string]*keyQueue
 
 	clock  clock.Clock
+	rec    metric.Recorder
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -88,6 +90,7 @@ func New(capacity int, leakRate float64, opts ...Option) *LeakyBucket {
 		leakRate:  leakRate,
 		idleClean: 5 * time.Minute,
 		clock:     clock.RealClock{},
+		rec:       metric.Default(),
 		done:      make(chan struct{}),
 		queues:    make(map[string]*keyQueue),
 	}
@@ -99,9 +102,29 @@ func New(capacity int, leakRate float64, opts ...Option) *LeakyBucket {
 	return lb
 }
 
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (lb *LeakyBucket) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		lb.rec.IncAllowed(algorithmName)
+	} else {
+		lb.rec.IncDenied(algorithmName)
+	}
+	lb.rec.ObserveDecision(algorithmName, lb.clock.Now().Sub(start))
+}
+
 // Allow attempts to queue a request for key. Non-blocking.
 // If the queue is full, returns Allowed=false immediately.
-func (lb *LeakyBucket) Allow(ctx context.Context, key string) ratelimit.Result {
+func (lb *LeakyBucket) Allow(ctx context.Context, key string) (res ratelimit.Result) {
+	start := lb.clock.Now()
+	defer func() { lb.record(res, start) }()
+	return lb.allow1(ctx, key)
+}
+
+// allow1 is the unrecorded single-request path, shared by Allow and the n==1
+// fast path of AllowN so a decision is recorded exactly once.
+func (lb *LeakyBucket) allow1(ctx context.Context, key string) ratelimit.Result {
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
@@ -147,7 +170,10 @@ func (lb *LeakyBucket) Allow(ctx context.Context, key string) ratelimit.Result {
 // AllowN checks if n requests can be queued atomically.
 // All n tokens are enqueued or none — if fewer than n slots are free, the
 // entire batch is denied immediately without enqueuing any token.
-func (lb *LeakyBucket) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
+func (lb *LeakyBucket) AllowN(ctx context.Context, key string, n int) (res ratelimit.Result) {
+	start := lb.clock.Now()
+	defer func() { lb.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
@@ -163,7 +189,7 @@ func (lb *LeakyBucket) AllowN(ctx context.Context, key string, n int) ratelimit.
 		}
 	}
 	if n == 1 {
-		return lb.Allow(ctx, key)
+		return lb.allow1(ctx, key)
 	}
 
 	q := lb.getOrCreate(key)

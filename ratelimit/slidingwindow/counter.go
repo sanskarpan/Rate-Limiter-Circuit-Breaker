@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -48,6 +49,7 @@ type SlidingWindowCounter struct {
 	window    time.Duration
 	idleClean time.Duration
 	clock     clock.Clock
+	rec       metric.Recorder
 
 	mu       sync.RWMutex
 	counters map[string]*keyCounter
@@ -63,6 +65,17 @@ type CounterOption func(*SlidingWindowCounter)
 // WithCounterClock sets the clock for testing.
 func WithCounterClock(c clock.Clock) CounterOption {
 	return func(swc *SlidingWindowCounter) { swc.clock = c }
+}
+
+// WithCounterRecorder wires a metric.Recorder so allow/deny decisions and
+// decision latency are emitted. Defaults to metric.Default() (a no-op) when
+// unset. A nil recorder is ignored.
+func WithCounterRecorder(rec metric.Recorder) CounterOption {
+	return func(swc *SlidingWindowCounter) {
+		if rec != nil {
+			swc.rec = rec
+		}
+	}
 }
 
 // NewCounter creates a SlidingWindowCounter allowing limit requests per window.
@@ -83,6 +96,7 @@ func NewCounter(limit int, window time.Duration, opts ...CounterOption) *Sliding
 		window:    window,
 		idleClean: window * 5,
 		clock:     clock.RealClock{},
+		rec:       metric.Default(),
 		counters:  make(map[string]*keyCounter),
 		done:      make(chan struct{}),
 	}
@@ -100,7 +114,10 @@ func (swc *SlidingWindowCounter) Allow(ctx context.Context, key string) ratelimi
 }
 
 // AllowN checks if n requests are allowed (approximately).
-func (swc *SlidingWindowCounter) AllowN(_ context.Context, key string, n int) ratelimit.Result {
+func (swc *SlidingWindowCounter) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
+	start := swc.clock.Now()
+	defer func() { swc.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: counterAlgorithmName}
 	}
@@ -109,6 +126,18 @@ func (swc *SlidingWindowCounter) AllowN(_ context.Context, key string, n int) ra
 	}
 	kc := swc.getOrCreate(key)
 	return swc.consume(kc, n)
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (swc *SlidingWindowCounter) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		swc.rec.IncAllowed(counterAlgorithmName)
+	} else {
+		swc.rec.IncDenied(counterAlgorithmName)
+	}
+	swc.rec.ObserveDecision(counterAlgorithmName, swc.clock.Now().Sub(start))
 }
 
 // Wait blocks until allowed or ctx is cancelled.

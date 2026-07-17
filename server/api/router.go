@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/observability/otelhttp"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/metrics"
 )
@@ -116,6 +117,7 @@ func NewRouterWithHub(
 	handler = LimitRequestBody(handler)
 	handler = SecurityHeaders(handler)
 	handler = Recovery(logger)(handler)
+	handler = otelhttp.Middleware("resilience-server")(handler)
 
 	return handler, hub
 }

@@ -216,7 +216,7 @@
             "lineWidth": 1,
             "showPoints": "never"
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -229,12 +229,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "resilience_ratelimit_active_keys",
-          "legendFormat": "{{algorithm}} active keys",
+          "expr": "sum(rate(resilience_ratelimit_requests_total[1m])) by (algorithm)",
+          "legendFormat": "{{algorithm}}",
           "refId": "A"
         }
       ],
-      "title": "Active Rate Limit Keys",
+      "title": "Rate Limit Throughput by Algorithm (req/s)",
       "type": "timeseries"
     },
     {
@@ -256,14 +256,14 @@
             "showPoints": "never"
           },
           "mappings": [
-            { "options": { "0": { "text": "CLOSED" }, "1": { "text": "OPEN" }, "2": { "text": "HALF-OPEN" } }, "type": "value" }
+            { "options": { "0": { "text": "CLOSED" }, "1": { "text": "HALF-OPEN" }, "2": { "text": "OPEN" } }, "type": "value" }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "red", "value": 1 },
-              { "color": "yellow", "value": 2 }
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 2 }
             ]
           },
           "unit": "short"
@@ -284,7 +284,7 @@
           "refId": "A"
         }
       ],
-      "title": "Circuit Breaker State (0=closed, 1=open, 2=half-open)",
+      "title": "Circuit Breaker State (0=closed, 1=half-open, 2=open)",
       "type": "timeseries"
     },
     {
@@ -456,6 +456,77 @@
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 250,
+      "title": "Bulkhead",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "id": 15,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "resilience_bulkhead_inflight",
+          "legendFormat": "{{name}} inflight",
+          "refId": "A"
+        }
+      ],
+      "title": "Bulkhead In-Flight",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "id": 16,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(resilience_bulkhead_rejected_total[1m])) by (name)",
+          "legendFormat": "{{name}} rejected",
+          "refId": "A"
+        }
+      ],
+      "title": "Bulkhead Rejections (req/s)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
       "id": 300,
       "title": "HTTP Server",
       "type": "row"
@@ -475,7 +546,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
       "id": 10,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -484,8 +555,8 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_requests_total[1m])) by (handler, code)",
-          "legendFormat": "{{handler}} {{code}}",
+          "expr": "sum(rate(resilience_http_requests_total[1m])) by (path, status)",
+          "legendFormat": "{{path}} {{status}}",
           "refId": "A"
         }
       ],
@@ -507,7 +578,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
       "id": 11,
       "options": {
         "legend": { "calcs": ["mean", "p95", "p99"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -516,20 +587,20 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, handler))",
-          "legendFormat": "p50 {{handler}}",
+          "expr": "histogram_quantile(0.50, sum(rate(resilience_http_request_duration_seconds_bucket[1m])) by (le, path))",
+          "legendFormat": "p50 {{path}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, handler))",
-          "legendFormat": "p95 {{handler}}",
+          "expr": "histogram_quantile(0.95, sum(rate(resilience_http_request_duration_seconds_bucket[1m])) by (le, path))",
+          "legendFormat": "p95 {{path}}",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, handler))",
-          "legendFormat": "p99 {{handler}}",
+          "expr": "histogram_quantile(0.99, sum(rate(resilience_http_request_duration_seconds_bucket[1m])) by (le, path))",
+          "legendFormat": "p99 {{path}}",
           "refId": "C"
         }
       ],
@@ -538,7 +609,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
       "id": 400,
       "title": "Go Runtime",
       "type": "row"
@@ -558,7 +629,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 44 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 53 },
       "id": 12,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -596,7 +667,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 44 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 53 },
       "id": 13,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -628,7 +699,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 44 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 53 },
       "id": 14,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -655,5 +726,5 @@
   "timezone": "browser",
   "title": "Resilience - Rate Limiter & Circuit Breaker",
   "uid": "resilience-dashboard",
-  "version": 1
+  "version": 2
 }

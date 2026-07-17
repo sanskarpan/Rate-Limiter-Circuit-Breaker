@@ -26,6 +26,7 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/atomicx"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -52,6 +53,7 @@ type TokenBucket struct {
 	buckets map[string]*bucket
 
 	clock  clock.Clock
+	rec    metric.Recorder
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -75,6 +77,7 @@ func New(capacity float64, refillRate float64, opts ...Option) *TokenBucket {
 	tb := &TokenBucket{
 		idleClean: 5 * time.Minute,
 		clock:     clock.RealClock{},
+		rec:       metric.Default(),
 		done:      make(chan struct{}),
 		buckets:   make(map[string]*bucket),
 	}
@@ -96,7 +99,10 @@ func (tb *TokenBucket) Allow(ctx context.Context, key string) ratelimit.Result {
 
 // AllowN checks if n tokens are available. Consumes all n or none (atomic).
 // Non-blocking. Safe for concurrent use.
-func (tb *TokenBucket) AllowN(_ context.Context, key string, n int) ratelimit.Result {
+func (tb *TokenBucket) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
+	start := tb.clock.Now()
+	defer func() { tb.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
@@ -105,6 +111,18 @@ func (tb *TokenBucket) AllowN(_ context.Context, key string, n int) ratelimit.Re
 	}
 	b := tb.getOrCreate(key)
 	return tb.consume(b, float64(n))
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every method is an empty inlined call, so this stays
+// allocation-free on the hot path.
+func (tb *TokenBucket) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		tb.rec.IncAllowed(algorithmName)
+	} else {
+		tb.rec.IncDenied(algorithmName)
+	}
+	tb.rec.ObserveDecision(algorithmName, tb.clock.Now().Sub(start))
 }
 
 // Wait blocks until 1 token is available or ctx is cancelled.

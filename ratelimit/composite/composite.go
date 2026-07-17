@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -63,6 +64,11 @@ type CompositeLimiter struct {
 	// otherwise WaitN would sleep on real wall time while the underlying limiters
 	// advance on the injected clock, and never observe refilled tokens (F-2).
 	clock clock.Clock
+
+	// rec records the composite's own final decision under composite_and /
+	// composite_or. The underlying limiters keep their own recorders (default
+	// Nop) so wiring is opt-in per layer.
+	rec metric.Recorder
 }
 
 // New creates a CompositeLimiter combining the given limiters.
@@ -71,6 +77,7 @@ func New(mode Mode, limiters ...ratelimit.Limiter) *CompositeLimiter {
 		limiters: limiters,
 		mode:     mode,
 		clock:    clock.RealClock{},
+		rec:      metric.Default(),
 	}
 }
 
@@ -82,6 +89,30 @@ func (c *CompositeLimiter) WithClock(clk clock.Clock) *CompositeLimiter {
 	return c
 }
 
+// WithRecorder wires a metric.Recorder so the composite's own allow/deny
+// decision and decision latency are emitted under composite_and/composite_or.
+// Defaults to metric.Default() (a no-op) when unset. Returns the limiter for
+// chaining. A nil recorder is ignored. Not safe to call concurrently with
+// AllowN.
+func (c *CompositeLimiter) WithRecorder(rec metric.Recorder) *CompositeLimiter {
+	if rec != nil {
+		c.rec = rec
+	}
+	return c
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (c *CompositeLimiter) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		c.rec.IncAllowed(c.algorithm())
+	} else {
+		c.rec.IncDenied(c.algorithm())
+	}
+	c.rec.ObserveDecision(c.algorithm(), c.clock.Now().Sub(start))
+}
+
 // Allow checks if 1 request is allowed. Non-blocking.
 func (c *CompositeLimiter) Allow(ctx context.Context, key string) ratelimit.Result {
 	return c.AllowN(ctx, key, 1)
@@ -90,7 +121,10 @@ func (c *CompositeLimiter) Allow(ctx context.Context, key string) ratelimit.Resu
 // AllowN checks if n requests are allowed. Non-blocking.
 // AND mode: two-phase check then consume — atomic across all limiters.
 // OR mode: first allow wins.
-func (c *CompositeLimiter) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
+func (c *CompositeLimiter) AllowN(ctx context.Context, key string, n int) (res ratelimit.Result) {
+	start := c.clock.Now()
+	defer func() { c.record(res, start) }()
+
 	if len(c.limiters) == 0 {
 		return ratelimit.Result{
 			Allowed:   false,
