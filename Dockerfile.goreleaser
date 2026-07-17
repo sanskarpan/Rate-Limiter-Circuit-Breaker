@@ -1,0 +1,14 @@
+# Minimal runtime image used by GoReleaser. GoReleaser builds the binary itself
+# (see the `builds:` section) and copies it into this image's build context, so
+# this Dockerfile does NOT compile from source — it only wraps the pre-built
+# `demo-server` binary in a distroless nonroot image.
+FROM gcr.io/distroless/static:nonroot
+
+LABEL org.opencontainers.image.title="resilience-demo" \
+      org.opencontainers.image.description="Rate Limiter & Circuit Breaker demo server" \
+      org.opencontainers.image.source="https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
+
+COPY demo-server /demo-server
+USER nonroot:nonroot
+EXPOSE 8080 9090
+ENTRYPOINT ["/demo-server"]
