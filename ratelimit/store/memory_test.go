@@ -399,7 +399,7 @@ func TestMemory_MaxKeys_SetNX(t *testing.T) {
 	}
 
 	// Third key should fail
-	ok, err = s.SetNX(ctx, "key3", "val3", 0)
+	_, err = s.SetNX(ctx, "key3", "val3", 0)
 	if err == nil {
 		t.Fatal("expected error for exceeding max keys")
 	}
