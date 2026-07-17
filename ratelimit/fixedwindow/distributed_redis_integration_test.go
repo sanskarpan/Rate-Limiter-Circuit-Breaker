@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/fixedwindow"
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 func newRedis(t *testing.T) *store.Redis {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 func TestMemory_GetSet_Basic(t *testing.T) {

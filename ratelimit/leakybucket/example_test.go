@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sanskarpan/resilience/ratelimit/leakybucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/leakybucket"
 )
 
 func Example() {

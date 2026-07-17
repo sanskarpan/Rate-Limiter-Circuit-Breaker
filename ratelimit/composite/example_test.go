@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/composite"
-	"github.com/sanskarpan/resilience/ratelimit/fixedwindow"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 func Example_andMode() {

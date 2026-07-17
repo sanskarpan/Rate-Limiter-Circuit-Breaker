@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/fixedwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
 )
 
 // ExampleNew demonstrates basic fixed window rate limiting.

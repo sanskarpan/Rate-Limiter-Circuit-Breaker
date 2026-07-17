@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sanskarpan/resilience/ratelimit/store"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 // These tests exercise the Distributed token bucket against an in-memory store

@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 // DistributedSlidingWindowLog is a Redis sorted set-backed sliding window log.

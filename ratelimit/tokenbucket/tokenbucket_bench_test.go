@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sanskarpan/resilience/internal/clock"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 func BenchmarkTokenBucket_Allow_SingleKey(b *testing.B) {

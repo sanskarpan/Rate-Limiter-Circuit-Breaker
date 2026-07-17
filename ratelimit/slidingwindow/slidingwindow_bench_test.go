@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/slidingwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/slidingwindow"
 )
 
 // BenchmarkSlidingWindowLog_Allow_100Keys benchmarks with 100 distinct keys.

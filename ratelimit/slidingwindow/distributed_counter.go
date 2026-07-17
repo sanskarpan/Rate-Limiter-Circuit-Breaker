@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 // DistributedSlidingWindowCounter approximates a sliding window using two fixed-window
