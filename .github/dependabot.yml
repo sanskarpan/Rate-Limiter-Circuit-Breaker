@@ -30,6 +30,16 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
+    ignore:
+      # These majors break the current Next 16 / React 19 stack (validated:
+      # typescript@7 breaks CSS side-effect imports and next.config.ts transpile,
+      # eslint@10 / @types/node@26 follow). Revisit when the ecosystem catches up.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-production:
         dependency-type: "production"
