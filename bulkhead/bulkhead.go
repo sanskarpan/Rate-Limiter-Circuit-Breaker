@@ -8,6 +8,8 @@ import (
 	"errors"
 	"sync/atomic"
 	"time"
+
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
 
 // ErrBulkheadFull is returned when no slot is available within the configured
@@ -23,20 +25,49 @@ type Bulkhead struct {
 	maxWait  time.Duration
 	inflight atomic.Int64
 	rejected atomic.Int64
+
+	name string
+	rec  metric.Recorder
+}
+
+// Option configures a Bulkhead.
+type Option func(*Bulkhead)
+
+// WithName sets the bulkhead's name, used as the "name" label on emitted
+// metrics. Defaults to "default".
+func WithName(name string) Option {
+	return func(b *Bulkhead) { b.name = name }
+}
+
+// WithRecorder wires a metric.Recorder so in-flight saturation and rejections
+// are emitted. Defaults to metric.Default() (a no-op) when unset, keeping the
+// hot path allocation-free. A nil recorder is ignored.
+func WithRecorder(rec metric.Recorder) Option {
+	return func(b *Bulkhead) {
+		if rec != nil {
+			b.rec = rec
+		}
+	}
 }
 
 // New creates a new Bulkhead with the given concurrency limit and wait timeout.
 // maxConcurrency must be greater than zero.
 // maxWait of 0 means non-blocking: if no slot is available the call is
 // rejected immediately.
-func New(maxConcurrency int, maxWait time.Duration) *Bulkhead {
+func New(maxConcurrency int, maxWait time.Duration, opts ...Option) *Bulkhead {
 	if maxConcurrency <= 0 {
 		panic("bulkhead: maxConcurrency must be greater than zero")
 	}
-	return &Bulkhead{
+	b := &Bulkhead{
 		sem:     make(chan struct{}, maxConcurrency),
 		maxWait: maxWait,
+		name:    "default",
+		rec:     metric.Default(),
 	}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
 }
 
 // Execute acquires a concurrency slot, runs fn with the provided context, then
@@ -51,7 +82,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 		case b.sem <- struct{}{}:
 			// Slot acquired.
 		default:
-			b.rejected.Add(1)
+			b.reject()
 			return ErrBulkheadFull
 		}
 	} else {
@@ -64,23 +95,34 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 		case b.sem <- struct{}{}:
 			// Slot acquired.
 		case <-ctx.Done():
-			b.rejected.Add(1)
+			b.reject()
 			return ctx.Err()
 		case <-timer.C:
-			b.rejected.Add(1)
+			b.reject()
 			return ErrBulkheadFull
 		}
 	}
 
 	// Slot is held. Always release it, even on panic.
-	b.inflight.Add(1)
+	n := b.inflight.Add(1)
+	b.rec.SetBulkheadInflight(b.name, int(n))
 	defer func() {
 		<-b.sem
-		b.inflight.Add(-1)
+		b.rec.SetBulkheadInflight(b.name, int(b.inflight.Add(-1)))
 	}()
 
 	return fn(ctx)
 }
+
+// reject records a rejection on both the internal counter and the recorder.
+// (metric.Default() makes the recorder call a no-op.)
+func (b *Bulkhead) reject() {
+	b.rejected.Add(1)
+	b.rec.IncBulkheadRejected(b.name)
+}
+
+// Name returns the bulkhead's configured name (the metric "name" label).
+func (b *Bulkhead) Name() string { return b.name }
 
 // Inflight returns the number of executions currently in progress.
 func (b *Bulkhead) Inflight() int64 {
