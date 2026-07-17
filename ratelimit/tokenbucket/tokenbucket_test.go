@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
-	"github.com/sanskarpan/resilience/internal/testutil"
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/testutil"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 func newTestClock() *clock.ManualClock {
