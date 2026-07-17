@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "resilience-demo.configMapName" . }}
+  labels:
+    {{- include "resilience-demo.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- if .Values.redis.enabled }}
+  REDIS_ADDR: {{ .Values.redis.addr | quote }}
+  {{- end }}
+  OTEL_ENABLED: {{ .Values.otel.enabled | quote }}
+  {{- if and .Values.otel.enabled .Values.otel.endpoint }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.otel.endpoint | quote }}
+  {{- end }}

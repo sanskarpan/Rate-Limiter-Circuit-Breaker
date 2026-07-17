@@ -1,0 +1,27 @@
+apiVersion: v2
+name: resilience-demo
+description: >-
+  Helm chart for the Rate Limiter & Circuit Breaker demo server. Wraps the
+  hardened Kubernetes manifests (nonroot, read-only rootfs, dropped caps,
+  liveness/readiness probes) with configurable image, replicas, resources,
+  autoscaling, disruption budget, and Prometheus scraping.
+type: application
+
+# Chart version is independent of the app version and follows the chart's own
+# release cadence.
+version: 0.1.0
+
+# Matches server/version.Version. Overridable via image.tag in values.yaml.
+appVersion: "0.1.0"
+
+home: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
+sources:
+  - https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
+keywords:
+  - rate-limiter
+  - circuit-breaker
+  - resilience
+  - observability
+maintainers:
+  - name: sanskarpan
+    url: https://github.com/sanskarpan

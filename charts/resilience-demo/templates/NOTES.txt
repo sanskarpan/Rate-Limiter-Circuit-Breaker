@@ -1,0 +1,36 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} has been deployed as release "{{ .Release.Name }}".
+
+Image:      {{ include "resilience-demo.image" . }}
+Namespace:  {{ .Release.Namespace }}
+Replicas:   {{ if .Values.autoscaling.enabled }}autoscaled {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }}{{ else }}{{ .Values.replicaCount }}{{ end }}
+
+1. Check the rollout status:
+
+    kubectl rollout status deployment/{{ include "resilience-demo.fullname" . }} -n {{ .Release.Namespace }}
+
+2. Port-forward and hit the health endpoints:
+
+    kubectl port-forward svc/{{ include "resilience-demo.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+    curl http://localhost:8080/health/ready
+    curl http://localhost:8080/health/live
+
+3. Prometheus metrics are exposed at /metrics on port {{ .Values.prometheus.port }}.
+{{- if .Values.prometheus.scrape }} Pods carry prometheus.io/scrape annotations.{{- end }}
+
+{{- if .Values.auth.enabled }}
+
+NOTE: API-key auth is ENABLED. Protected endpoints require the `X-API-Key` header
+matching the value in secret {{ include "resilience-demo.secretName" . }}.
+{{- else }}
+
+NOTE: API-key auth is DISABLED (auth.enabled=false). The demo is not a hardened
+public service — do not expose it directly to untrusted traffic.
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+
+Distributed rate limiting is ENABLED against Redis at {{ .Values.redis.addr }}.
+{{- else }}
+
+Rate limiting uses the in-memory backend (redis.enabled=false).
+{{- end }}
