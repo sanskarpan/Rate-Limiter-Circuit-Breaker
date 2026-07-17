@@ -28,10 +28,10 @@ type Config struct {
 // Load reads configuration from environment variables, falling back to defaults.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:            8080,
-		Host:            "0.0.0.0",
-		Env:             "dev",
-		CORSOrigins:     []string{"http://localhost:3000"},
+		Port:              8080,
+		Host:              "0.0.0.0",
+		Env:               "dev",
+		CORSOrigins:       []string{"http://localhost:3000"},
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
