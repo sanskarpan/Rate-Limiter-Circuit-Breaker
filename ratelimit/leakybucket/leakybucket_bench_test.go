@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sanskarpan/resilience/internal/clock"
-	"github.com/sanskarpan/resilience/ratelimit/leakybucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/leakybucket"
 )
 
 func BenchmarkLeakyBucket_Allow_SingleKey(b *testing.B) {
