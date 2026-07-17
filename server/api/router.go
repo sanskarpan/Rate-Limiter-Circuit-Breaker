@@ -45,6 +45,22 @@ func NewRouter(
 	corsOrigins []string,
 	apiKey string,
 ) http.Handler {
+	handler, _ := NewRouterWithHub(limiters, cbs, registry, logger, ready, corsOrigins, apiKey)
+	return handler
+}
+
+// NewRouterWithHub is like NewRouter but also returns the *Hub so the caller can
+// Stop() it on shutdown to drain WebSocket goroutines (H-17/F-2). The demo
+// server (main) uses this; tests that don't need shutdown use NewRouter.
+func NewRouterWithHub(
+	limiters map[string]ratelimit.Limiter,
+	cbs map[string]*circuitbreaker.CircuitBreaker,
+	registry *circuitbreaker.Registry,
+	logger *slog.Logger,
+	ready *atomic.Bool,
+	corsOrigins []string,
+	apiKey string,
+) (http.Handler, *Hub) {
 	hub := newHub(logger)
 	go hub.Run()
 
@@ -109,5 +125,5 @@ func NewRouter(
 	handler = SecurityHeaders(handler)
 	handler = Recovery(logger)(handler)
 
-	return handler
+	return handler, hub
 }
