@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
 // CBUnaryServerInterceptor returns a gRPC unary server interceptor that wraps
