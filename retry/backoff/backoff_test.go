@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/retry/backoff"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 // ---------------------------------------------------------------------------
