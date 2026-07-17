@@ -485,39 +485,35 @@ var errStoreFull = fmt.Errorf("store: max keys limit exceeded, denying new key")
 // lazily-reset entries have an empty value so callers can detect "fresh". It
 // returns errStoreFull when the store is at maxKeys and key is new (fail closed).
 func (m *Memory) loadOrCreateRaw(key string) (*entry, error) {
-	for {
-		if v, ok := m.entries.Load(key); ok {
-			e := v.(*entry)
-			e.mu.Lock()
-			expired := e.isExpired(time.Now())
-			if expired {
-				// Reset in place so the handler sees a fresh key without a
-				// removal/re-add race. Entry stays counted.
-				e.value = ""
-				e.expiresAt = time.Time{}
-			}
-			e.mu.Unlock()
-			return e, nil
+	if v, ok := m.entries.Load(key); ok {
+		e := v.(*entry)
+		e.mu.Lock()
+		if e.isExpired(time.Now()) {
+			// Reset in place so the handler sees a fresh key without a
+			// removal/re-add race. Entry stays counted.
+			e.value = ""
+			e.expiresAt = time.Time{}
 		}
-		// Reserve before publishing (M-14 discipline).
-		if m.maxKeys > 0 {
-			if err := m.reserveSlot(); err != nil {
-				// At capacity for a NEW key: fail closed (deny) instead of
-				// admitting everything (F-4).
-				return nil, errStoreFull
-			}
-		}
-		ne := &entry{}
-		actual, loaded := m.entries.LoadOrStore(key, ne)
-		if loaded {
-			if m.maxKeys > 0 {
-				m.keyCount.Add(-1)
-			}
-			e := actual.(*entry)
-			return e, nil
-		}
-		return ne, nil
+		e.mu.Unlock()
+		return e, nil
 	}
+	// Reserve before publishing (M-14 discipline).
+	if m.maxKeys > 0 {
+		if err := m.reserveSlot(); err != nil {
+			// At capacity for a NEW key: fail closed (deny) instead of
+			// admitting everything (F-4).
+			return nil, errStoreFull
+		}
+	}
+	ne := &entry{}
+	actual, loaded := m.entries.LoadOrStore(key, ne)
+	if loaded {
+		if m.maxKeys > 0 {
+			m.keyCount.Add(-1)
+		}
+		return actual.(*entry), nil
+	}
+	return ne, nil
 }
 
 // loadEntry returns the entry for key or nil, treating expired as absent.
@@ -653,4 +649,3 @@ func (z *zset) removeByScoreUpTo(cutoff int64) {
 		z.members = z.members[idx:]
 	}
 }
-
