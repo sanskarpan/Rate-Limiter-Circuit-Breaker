@@ -54,10 +54,27 @@ type FixedWindowCounter struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // Option configures a FixedWindowCounter.
 type Option func(*FixedWindowCounter)
+
+// WithOnDecision registers a hook fired after every Allow/AllowN decision
+// (both allow and deny), receiving the key and the resulting Result. The
+// default is nil (a cheap no-op guarded by a nil check on the hot path). The
+// hook runs synchronously on the calling goroutine before the decision is
+// returned, so keep it fast and non-blocking. A nil hook is ignored.
+func WithOnDecision(fn func(key string, r ratelimit.Result)) Option {
+	return func(fw *FixedWindowCounter) {
+		if fn != nil {
+			fw.onDecision = fn
+		}
+	}
+}
 
 // WithClock sets a custom clock for deterministic testing.
 func WithClock(c clock.Clock) Option {
@@ -118,7 +135,15 @@ func (fw *FixedWindowCounter) Allow(ctx context.Context, key string) ratelimit.R
 // AllowN checks if n requests are allowed (atomically, all or none).
 func (fw *FixedWindowCounter) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
 	start := fw.clock.Now()
-	defer func() { fw.record(res, start) }()
+	defer func() {
+		if n != 1 {
+			setCost(&res, n)
+		}
+		fw.record(res, start)
+		if fw.onDecision != nil {
+			fw.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
@@ -129,6 +154,15 @@ func (fw *FixedWindowCounter) AllowN(_ context.Context, key string, n int) (res 
 
 	c := fw.getOrCreate(key)
 	return fw.consume(c, n)
+}
+
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free.
+func setCost(res *ratelimit.Result, cost int) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
 }
 
 // record fires the configured metric.Recorder for a completed decision. With
