@@ -60,17 +60,28 @@ func TestMemory_IncrBy_TTLOnlyOnCreation(t *testing.T) {
 	defer m.Close()
 	ctx := t.Context()
 
-	if _, err := m.IncrBy(ctx, "win", 1, 60*time.Millisecond); err != nil {
+	const ttl = 50 * time.Millisecond
+	if _, err := m.IncrBy(ctx, "win", 1, ttl); err != nil {
 		t.Fatalf("IncrBy create failed: %v", err)
 	}
-	// Keep incrementing; TTL must NOT be refreshed by later increments.
-	deadline := time.Now().Add(120 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		_, _ = m.IncrBy(ctx, "win", 1, 60*time.Millisecond)
-		time.Sleep(15 * time.Millisecond)
+	// Increment several more times immediately, all comfortably WITHIN the TTL
+	// window. These must not refresh the TTL. We deliberately stop incrementing
+	// before the key can expire: an increment on an already-expired key would
+	// re-create it with a fresh TTL (correct behaviour), but a cross-boundary
+	// loop made the old test nondeterministic (F-6).
+	for i := 0; i < 3; i++ {
+		if _, err := m.IncrBy(ctx, "win", 1, ttl); err != nil {
+			t.Fatalf("IncrBy failed: %v", err)
+		}
 	}
-	// After > original TTL from creation, the key must have expired despite the
-	// repeated increments (proving TTL was set only on creation).
+	if v, err := m.Get(ctx, "win"); err != nil || v != "4" {
+		t.Fatalf("expected live counter value 4, got v=%q err=%v", v, err)
+	}
+
+	// Wait well past the ORIGINAL TTL (5x margin, robust under load) without
+	// incrementing. If the increments had refreshed the TTL the key would still
+	// be alive; because TTL is set only on creation, it must have expired.
+	time.Sleep(5 * ttl)
 	if _, err := m.Get(ctx, "win"); err != ErrNotFound {
 		t.Fatalf("expected key to expire (TTL set only on creation), got err=%v", err)
 	}

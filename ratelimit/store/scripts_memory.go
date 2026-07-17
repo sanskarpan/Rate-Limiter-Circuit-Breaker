@@ -123,16 +123,25 @@ func (m *Memory) tokenBucketHandler(keys []string, args []any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Mirror Redis: with refillRate <= 0 the Lua PEXPIRE argument becomes
+	// capacity/0 = inf, which errors and fails the whole Eval (deny). Fail
+	// closed here too rather than silently admitting with no expiry (F-5).
+	if refillRate <= 0 {
+		return nil, fmt.Errorf("tokenBucketHandler: refillRate must be > 0, got %v", refillRate)
+	}
 	var ttlMs int64
 	if len(args) >= 5 {
 		ttlMs, _ = toInt64(args[4])
 	}
-	if ttlMs < 1 && refillRate > 0 {
+	if ttlMs < 1 {
 		ttlMs = int64(math.Ceil(capacity / refillRate / 1000000))
 	}
 
 	key := keys[0]
-	e := m.loadOrCreateRaw(key)
+	e, err := m.loadOrCreateRaw(key)
+	if err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -222,28 +231,39 @@ func (m *Memory) gcraHandler(keys []string, args []any) (any, error) {
 	}
 
 	key := keys[0]
-	e := m.loadOrCreateRaw(key)
+	e, err := m.loadOrCreateRaw(key)
+	if err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	storedTAT := now
+	// Redis evaluates this in Lua, where the nanosecond TAT/now (~1.78e18, well
+	// above float64's 2^53 exact-integer ceiling) are reloaded and computed as
+	// doubles, snapping to ~256ns granularity. We do the arithmetic in float64
+	// too so the in-memory emulation stays faithful to the real Lua script and
+	// the memory-store tests validate the same algorithm Redis runs (F-1).
+	nowF := float64(now)
+	storedF := nowF
 	if e.value != "" {
 		if v, err := strconv.ParseInt(e.value, 10, 64); err == nil {
-			storedTAT = v
+			storedF = float64(v)
 		}
 	}
-	base := storedTAT
-	if now > base {
-		base = now
+	baseF := storedF
+	if nowF > baseF {
+		baseF = nowF
 	}
-	tat := base + emission*n
-	limitWindow := now + emission*burst
+	tatF := baseF + float64(emission)*float64(n)
+	limitWindowF := nowF + float64(emission)*float64(burst)
 
-	if tat > limitWindow {
+	if tatF > limitWindowF {
 		// Denied — do NOT persist the tentative TAT (matches Lua: only SET on allow).
-		return []any{int64(0), tat - limitWindow}, nil
+		return []any{int64(0), int64(tatF - limitWindowF)}, nil
 	}
-	e.value = strconv.FormatInt(tat, 10)
+	// int64(tatF) is exact and round-trips back through float64 (tatF is a
+	// whole-number double), matching Redis GET/tonumber on the next call.
+	e.value = strconv.FormatInt(int64(tatF), 10)
 	m.setEntryTTLmsAbs(e, ttlMs)
 	return []any{int64(1), int64(0)}, nil
 }
@@ -288,12 +308,20 @@ func (m *Memory) slidingWindowLogHandler(keys []string, args []any) (any, error)
 	}
 
 	key := keys[0]
-	e := m.loadOrCreateRaw(key)
+	e, err := m.loadOrCreateRaw(key)
+	if err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	// Redis sorted-set scores are float64. A nanosecond score (~1.78e18) snaps to
+	// ~256ns granularity when Redis stores/compares it, whereas exact int64 would
+	// not. Round now/cutoff through float64 so the emulation's eviction and count
+	// match the real ZSET behaviour (F-2).
+	nowScore := int64(float64(nowNs))
 	zs := parseZSet(e.value)
-	cutoff := nowNs - windowNs
+	cutoff := int64(float64(nowNs) - float64(windowNs))
 	zs.removeByScoreUpTo(cutoff)
 	count := int64(len(zs.members))
 
@@ -301,7 +329,7 @@ func (m *Memory) slidingWindowLogHandler(keys []string, args []any) (any, error)
 		retryAfter := int64(0)
 		if len(zs.members) > 0 {
 			oldest := zs.members[0].score
-			retryAfter = windowNs - (nowNs - oldest)
+			retryAfter = windowNs - (nowScore - oldest)
 			if retryAfter < 0 {
 				retryAfter = 0
 			}
@@ -311,7 +339,7 @@ func (m *Memory) slidingWindowLogHandler(keys []string, args []any) (any, error)
 		return []any{int64(0), count, retryAfter}, nil
 	}
 	for i := int64(1); i <= n; i++ {
-		zs.add(nowNs, fmt.Sprintf("%s-%d", entryID, i))
+		zs.add(nowScore, fmt.Sprintf("%s-%d", entryID, i))
 	}
 	e.value = zs.serialize()
 	m.setEntryTTLmsAbs(e, ttlMs)
@@ -354,18 +382,28 @@ func (m *Memory) slidingWindowCounterHandler(keys []string, args []any) (any, er
 	prevKey := keys[1]
 
 	// Lock ordering: current before prev, deterministic to avoid deadlock.
-	ce := m.loadOrCreateRaw(currentKey)
+	ce, err := m.loadOrCreateRaw(currentKey)
+	if err != nil {
+		return nil, err
+	}
 	pe := m.loadEntry(prevKey)
 
+	// Hold BOTH the current and previous entry locks for the whole handler so the
+	// two-window read + increment is an atomic snapshot, matching Redis's
+	// single-threaded Lua evaluation (F-3). Lock order is always current-then-
+	// previous (descending window epoch), which is globally consistent and
+	// deadlock-free.
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
+	if pe != nil {
+		pe.mu.Lock()
+		defer pe.mu.Unlock()
+	}
 
 	current := parseCounter(ce.value)
 	var prev int64
 	if pe != nil {
-		pe.mu.Lock()
 		prev = parseCounter(pe.value)
-		pe.mu.Unlock()
 	}
 
 	estimated := float64(current) + float64(prev)*(1.0-fraction)
@@ -412,7 +450,10 @@ func (m *Memory) fixedWindowHandler(keys []string, args []any) (any, error) {
 	}
 
 	key := keys[0]
-	e := m.loadOrCreateRaw(key)
+	e, err := m.loadOrCreateRaw(key)
+	if err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -432,10 +473,18 @@ func (m *Memory) fixedWindowHandler(keys []string, args []any) (any, error) {
 // low-level entry helpers for the handlers
 // ---------------------------------------------------------------------------
 
+// errStoreFull is returned by loadOrCreateRaw when the store is at maxKeys and
+// the script targets a brand-new key. Handlers propagate it, and the distributed
+// limiter callers treat an Eval error as a DENY — so we fail CLOSED rather than
+// running the algorithm against a throwaway detached entry that always reads 0
+// and therefore always admits (F-4).
+var errStoreFull = fmt.Errorf("store: max keys limit exceeded, denying new key")
+
 // loadOrCreateRaw returns the entry for key, creating an empty (never-expiring)
 // one if absent, honoring maxKeys accounting and lazy expiry. Newly created or
-// lazily-reset entries have an empty value so callers can detect "fresh".
-func (m *Memory) loadOrCreateRaw(key string) *entry {
+// lazily-reset entries have an empty value so callers can detect "fresh". It
+// returns errStoreFull when the store is at maxKeys and key is new (fail closed).
+func (m *Memory) loadOrCreateRaw(key string) (*entry, error) {
 	for {
 		if v, ok := m.entries.Load(key); ok {
 			e := v.(*entry)
@@ -448,15 +497,14 @@ func (m *Memory) loadOrCreateRaw(key string) *entry {
 				e.expiresAt = time.Time{}
 			}
 			e.mu.Unlock()
-			return e
+			return e, nil
 		}
 		// Reserve before publishing (M-14 discipline).
 		if m.maxKeys > 0 {
 			if err := m.reserveSlot(); err != nil {
-				// At capacity: return a detached entry so the handler still runs
-				// but the value is never persisted. This mirrors an eviction /
-				// deny scenario rather than corrupting accounting.
-				return &entry{}
+				// At capacity for a NEW key: fail closed (deny) instead of
+				// admitting everything (F-4).
+				return nil, errStoreFull
 			}
 		}
 		ne := &entry{}
@@ -466,9 +514,9 @@ func (m *Memory) loadOrCreateRaw(key string) *entry {
 				m.keyCount.Add(-1)
 			}
 			e := actual.(*entry)
-			return e
+			return e, nil
 		}
-		return ne
+		return ne, nil
 	}
 }
 
