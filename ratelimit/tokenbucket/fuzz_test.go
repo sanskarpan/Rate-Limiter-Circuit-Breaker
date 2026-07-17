@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 // FuzzTokenBucket verifies key invariants hold for arbitrary inputs:
