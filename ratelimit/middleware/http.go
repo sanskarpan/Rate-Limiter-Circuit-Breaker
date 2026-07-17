@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
 // KeyFunc extracts a rate-limit key from an HTTP request.
