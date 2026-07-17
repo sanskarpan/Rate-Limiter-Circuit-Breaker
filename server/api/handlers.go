@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/server/simulation"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/simulation"
 )
 
 // maxConcurrentSimulations bounds the number of in-flight /simulate calls

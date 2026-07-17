@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
 // responseRecorder wraps an http.ResponseWriter and captures the status code

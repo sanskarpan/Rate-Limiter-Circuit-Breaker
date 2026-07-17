@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sanskarpan/resilience/server/simulation"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/simulation"
 )
 
 // simulateRequest is the body for POST /api/v1/simulate.

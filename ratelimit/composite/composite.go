@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
 const (

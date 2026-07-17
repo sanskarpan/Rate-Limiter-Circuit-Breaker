@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sanskarpan/resilience/ratelimit/gcra"
-	"github.com/sanskarpan/resilience/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
 
 // Exercises the Distributed GCRA against the in-memory script emulation

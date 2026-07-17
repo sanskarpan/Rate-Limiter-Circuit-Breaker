@@ -3,7 +3,7 @@ package leakybucket
 import (
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 )
 
 // Option configures a LeakyBucket.

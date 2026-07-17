@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/pipeline"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
-	"github.com/sanskarpan/resilience/retry"
-	"github.com/sanskarpan/resilience/retry/backoff"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 func Example() {

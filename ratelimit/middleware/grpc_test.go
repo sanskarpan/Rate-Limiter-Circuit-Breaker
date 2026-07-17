@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/sanskarpan/resilience/ratelimit"
-	mw "github.com/sanskarpan/resilience/ratelimit/middleware"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	mw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 )
 
 // ---------------------------------------------------------------------------

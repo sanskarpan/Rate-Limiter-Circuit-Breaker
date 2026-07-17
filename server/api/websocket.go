@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sanskarpan/resilience/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
 // maxWSMessageBytes is the maximum WebSocket message size (512 KiB).

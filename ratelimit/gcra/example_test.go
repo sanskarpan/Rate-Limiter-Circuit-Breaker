@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/gcra"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
 )
 
 func Example() {

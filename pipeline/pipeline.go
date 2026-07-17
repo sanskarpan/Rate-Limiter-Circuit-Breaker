@@ -29,10 +29,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sanskarpan/resilience/bulkhead"
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
 )
 
 // stageKind is the canonical rank of a stage. Lower kinds run outermost.

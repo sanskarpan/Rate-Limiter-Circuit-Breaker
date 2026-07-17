@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	cbmiddleware "github.com/sanskarpan/resilience/circuitbreaker/middleware"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	cbmiddleware "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
 )
 
 // newCB creates a circuit breaker configured for easy tripping in tests.
