@@ -31,6 +31,7 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/concurrency"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
 )
@@ -41,6 +42,7 @@ type stageKind int
 const (
 	kindRateLimit stageKind = iota
 	kindBulkhead
+	kindConcurrency
 	kindTimeout
 	kindCircuitBreaker
 	kindRetry
@@ -126,6 +128,24 @@ func (b *Builder) Bulkhead(maxConcurrency int, maxWait time.Duration) *Builder {
 func (b *Builder) BulkheadWith(bh *bulkhead.Bulkhead) *Builder {
 	b.stages = append(b.stages, builderStage{kindBulkhead, func(ctx context.Context, fn func(context.Context) error) error {
 		return bh.Execute(ctx, fn)
+	}})
+	return b
+}
+
+// Concurrency adds an adaptive concurrency-limiting stage (Netflix-style). It
+// runs between Bulkhead and Timeout: if the limiter is at its current limit the
+// request is shed with ErrConcurrencyLimited; otherwise the call's latency and
+// outcome feed the limiter's adaptive algorithm. See package concurrency.
+func (b *Builder) Concurrency(lim *concurrency.Limiter) *Builder {
+	b.stages = append(b.stages, builderStage{kindConcurrency, func(ctx context.Context, fn func(context.Context) error) error {
+		release, ok := lim.Acquire(ctx)
+		if !ok {
+			return ErrConcurrencyLimited
+		}
+		start := time.Now()
+		err := fn(ctx)
+		release(concurrency.Outcome{RTT: time.Since(start), Dropped: err != nil})
+		return err
 	}})
 	return b
 }
@@ -220,6 +240,10 @@ func (e *RateLimitError) Error() string {
 
 // ErrRateLimited is a sentinel that callers can use with errors.Is.
 var ErrRateLimited = errors.New("pipeline: rate limited")
+
+// ErrConcurrencyLimited is returned when the adaptive concurrency stage sheds a
+// request because it is at its current in-flight limit.
+var ErrConcurrencyLimited = errors.New("pipeline: concurrency limited")
 
 // Is implements errors.Is for RateLimitError.
 func (e *RateLimitError) Is(target error) bool {
