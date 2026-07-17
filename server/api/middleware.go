@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sanskarpan/resilience/server/metrics"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/metrics"
 )
 
 // maxRequestBodyBytes is the maximum allowed request body size (1 MiB).
