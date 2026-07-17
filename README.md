@@ -1,8 +1,8 @@
 # Resilience
 
 [![Go Version](https://img.shields.io/badge/go-1.24-blue.svg)](https://golang.org)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/resilience)](https://goreportcard.com/report/github.com/sanskarpan/resilience)
-[![pkg.go.dev](https://pkg.go.dev/badge/github.com/sanskarpan/resilience.svg)](https://pkg.go.dev/github.com/sanskarpan/resilience)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)](https://goreportcard.com/report/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
+[![pkg.go.dev](https://pkg.go.dev/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker.svg)](https://pkg.go.dev/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
 
 A production-grade Go library for rate limiting, circuit breaking, and resilience patterns — with **zero external runtime dependencies** in the core library.
 
@@ -36,8 +36,8 @@ A production-grade Go library for rate limiting, circuit breaking, and resilienc
 ```go
 import (
     "net/http"
-    "github.com/sanskarpan/resilience/ratelimit/tokenbucket"
-    ratelimitmw "github.com/sanskarpan/resilience/ratelimit/middleware"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+    ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 )
 
 limiter := tokenbucket.New(100, 20) // 100 req/s, burst of 20
@@ -84,7 +84,7 @@ All benchmarks run on Apple M-series (11 cores), Go 1.24, `GOMAXPROCS=11`.
 #### Token Bucket
 
 ```go
-import "github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 
 // New creates a local token bucket limiter.
 // rate: tokens added per second
@@ -117,7 +117,7 @@ limiter.Reset(ctx, "user:123")
 #### GCRA
 
 ```go
-import "github.com/sanskarpan/resilience/ratelimit/gcra"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
 
 // New creates a GCRA limiter.
 // rate: max requests per second
@@ -129,9 +129,9 @@ limiter := gcra.New(gcra.Options{Rate: 100, BurstSeconds: 0.2})
 
 ```go
 import (
-    "github.com/sanskarpan/resilience/ratelimit/composite"
-    "github.com/sanskarpan/resilience/ratelimit/tokenbucket"
-    "github.com/sanskarpan/resilience/ratelimit/fixedwindow"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
 )
 
 // Both must allow for the request to proceed
@@ -146,7 +146,7 @@ combined := composite.NewAND(
 ### Circuit Breaker
 
 ```go
-import "github.com/sanskarpan/resilience/circuitbreaker"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 
 cb := circuitbreaker.New(circuitbreaker.Config{
     Name:             "my-service",
@@ -176,8 +176,8 @@ fmt.Printf("state=%s failures=%d failure_rate=%.2f\n",
 
 ```go
 import (
-    "github.com/sanskarpan/resilience/pipeline"
-    "github.com/sanskarpan/resilience/retry/backoff"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 p := pipeline.New().
@@ -201,7 +201,7 @@ err := p.Execute(ctx, func(ctx context.Context) error {
 ### HTTP Middleware
 
 ```go
-import ratelimitmw "github.com/sanskarpan/resilience/ratelimit/middleware"
+import ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 
 // Rate limit by IP address
 http.Handle("/api/", ratelimitmw.RateLimit(
@@ -231,8 +231,8 @@ Response headers set automatically:
 
 ```go
 import (
-    ratelimitmw "github.com/sanskarpan/resilience/ratelimit/middleware"
-    cbmw "github.com/sanskarpan/resilience/circuitbreaker/middleware"
+    ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
+    cbmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
 )
 
 srv := grpc.NewServer(
@@ -252,8 +252,8 @@ srv := grpc.NewServer(
 
 ```go
 import (
-    "github.com/sanskarpan/resilience/ratelimit/store"
-    "github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
+    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 s := store.NewRedis(store.RedisOptions{
