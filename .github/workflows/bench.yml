@@ -1,0 +1,180 @@
+name: Benchmarks
+
+# Benchmark regression gate (ENHANCEMENTS.md §6.5).
+#
+# POLICY — noise-aware, two modes:
+#   • Pull requests → INFORMATIONAL. We benchmark the PR base and head, run
+#     `benchstat`, and post the delta table as a sticky PR comment. The job is
+#     always green: shared GitHub runners are noisy, so a per-PR hard failure
+#     would be flaky. The comment gives reviewers signal without blocking.
+#   • Nightly `schedule` → HARD GATE. The same base↔head comparison (main vs the
+#     nightly tip is a no-op, so the nightly run compares the previous tagged/
+#     baseline commit range) runs with a higher `-count` and FAILS the job if any
+#     hot-path benchmark regresses beyond REGRESSION_THRESHOLD_PCT. Nightly runs
+#     are not tied to a contributor's PR, so a flaky failure is cheap to re-run
+#     and easy to triage.
+#
+# NOISE MITIGATION:
+#   • `-count: 8` (PR) / `10` (nightly) so benchstat can compute a CI + p-value.
+#   • Bounded `-benchtime=200ms` and only the hot packages (token bucket, GCRA,
+#     circuit breaker) to keep wall-clock small and stable.
+#   • The gate only trips on a *large* regression (default 20%), well above
+#     typical shared-runner variance.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # 03:17 UTC nightly (off the top of the hour to dodge runner contention).
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+# Least privilege: read the repo, write PR comments only.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Bounded hot-path set — keep in sync with the Makefile `bench-ci` target.
+  BENCH_PKGS: "./ratelimit/tokenbucket/ ./ratelimit/gcra/ ./circuitbreaker/"
+  BENCH_TIME: "200ms"
+  # Fail the nightly gate only on a large regression (percent, sec/op).
+  REGRESSION_THRESHOLD_PCT: "20"
+
+jobs:
+  bench:
+    name: Benchmark regression
+    runs-on: ubuntu-latest
+    steps:
+      # Need full history so we can check out / diff the PR base commit.
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go (from go.mod)
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      # Resolve the two commits to compare.
+      #   • PR   → base = merge target, head = PR tip.
+      #   • else → base = HEAD~1, head = HEAD (nightly drift check).
+      - name: Resolve base/head refs
+        id: refs
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            COUNT=8
+          else
+            BASE="$(git rev-parse HEAD~1)"
+            HEAD="$(git rev-parse HEAD)"
+            COUNT=10
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Comparing base=$BASE head=$HEAD count=$COUNT"
+
+      # Use a detached worktree for BASE so we never disturb the checked-out HEAD.
+      - name: Benchmark BASE
+        run: |
+          git worktree add --detach /tmp/base "${{ steps.refs.outputs.base }}"
+          cd /tmp/base
+          go test -bench=. -benchmem -run='^$' \
+            -count=${{ steps.refs.outputs.count }} -benchtime=${{ env.BENCH_TIME }} \
+            ${{ env.BENCH_PKGS }} | tee "$GITHUB_WORKSPACE/base.txt"
+
+      - name: Benchmark HEAD
+        run: |
+          go test -bench=. -benchmem -run='^$' \
+            -count=${{ steps.refs.outputs.count }} -benchtime=${{ env.BENCH_TIME }} \
+            ${{ env.BENCH_PKGS }} | tee head.txt
+
+      - name: Compare with benchstat
+        id: stat
+        run: |
+          # Human-readable table for the comment / logs.
+          benchstat base.txt head.txt | tee benchstat.txt
+
+          # Machine-readable CSV for the regression gate (sec/op section only).
+          benchstat -format csv base.txt head.txt > benchstat.csv || true
+
+          {
+            echo "## Benchmark comparison (base vs head)"
+            echo
+            echo '```'
+            cat benchstat.txt
+            echo '```'
+          } > comment.md
+
+      - name: Post benchstat comment (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark-regression
+          path: comment.md
+
+      # HARD GATE — nightly / manual only. Parse the benchstat CSV "vs base"
+      # column (sec/op) and fail if any benchmark regresses beyond the threshold.
+      - name: Regression gate (nightly / manual)
+        if: github.event_name != 'pull_request'
+        run: |
+          python3 - "$REGRESSION_THRESHOLD_PCT" <<'PY'
+          import csv, sys
+          threshold = float(sys.argv[1])
+          section = None          # current metric header, e.g. "sec/op"
+          worst_name, worst_pct = None, 0.0
+          failures = []
+          with open("benchstat.csv") as fh:
+              for row in csv.reader(fh):
+                  if not row or not any(c.strip() for c in row):
+                      continue
+                  # Section header row looks like: ["", "sec/op", "CI", "sec/op", "CI", "vs base", "P"]
+                  if row[0] == "" and len(row) > 1 and row[1].strip():
+                      section = row[1].strip()
+                      continue
+                  if section != "sec/op":
+                      continue
+                  name = row[0].strip()
+                  if not name or name == "geomean":
+                      continue
+                  delta = row[5].strip() if len(row) > 5 else ""
+                  if delta in ("", "~"):
+                      continue
+                  try:
+                      pct = float(delta.replace("%", "").replace("+", ""))
+                  except ValueError:
+                      continue
+                  if pct > worst_pct:
+                      worst_name, worst_pct = name, pct
+                  if pct > threshold:
+                      failures.append((name, pct))
+          print(f"Worst regression: {worst_name} {worst_pct:+.2f}% (threshold {threshold}%)")
+          if failures:
+              for name, pct in failures:
+                  print(f"::error title=Benchmark regression::{name} regressed {pct:+.2f}% (> {threshold}%)")
+              sys.exit(1)
+          print("No benchmark regressed beyond threshold.")
+          PY
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: |
+            base.txt
+            head.txt
+            benchstat.txt
+            benchstat.csv
+          if-no-files-found: warn

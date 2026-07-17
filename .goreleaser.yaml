@@ -1,0 +1,176 @@
+# goreleaser v2 configuration for the resilience demo server.
+#
+# Produces, on every `v*` tag:
+#   - multi-platform binaries (linux/darwin x amd64/arm64), stripped, version-injected
+#   - tar.gz archives + a SHA-256 checksums file
+#   - SPDX SBOMs (via syft) for every archive
+#   - cosign keyless signatures (OIDC) over the checksums file and every artifact
+#   - multi-arch Docker images pushed to GHCR + a fat manifest
+#
+# SLSA provenance for the binaries and the container image is emitted by the
+# release workflow (actions/attest-build-provenance), which is the recommended
+# path on GitHub-hosted runners.
+version: 2
+
+project_name: resilience-demo
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: demo-server
+    binary: demo-server
+    main: ./server
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    ids:
+      - demo-server
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# ─── SBOMs ────────────────────────────────────────────────────────────────────
+# One SPDX-JSON SBOM per archive, generated with syft.
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
+
+# ─── Signing (cosign, keyless / OIDC) ─────────────────────────────────────────
+# Signs the checksums file *and* every released artifact (archives, SBOMs,
+# checksums) using Fulcio-issued short-lived certs. Requires id-token:write in CI.
+signs:
+  - id: checksums
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+  - id: all-artifacts
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: all
+    output: true
+
+# ─── Docker (multi-arch via per-arch images + a fat manifest) ─────────────────
+dockers:
+  - id: linux-amd64
+    ids:
+      - demo-server
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-amd64"
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
+  - id: linux-arm64
+    ids:
+      - demo-server
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-arm64"
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
+
+docker_manifests:
+  - name_template: "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-amd64"
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest"
+    image_templates:
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-amd64"
+      - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-arm64"
+
+# ─── Changelog ────────────────────────────────────────────────────────────────
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "merge conflict"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Performance
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: sanskarpan
+    name: Rate-Limiter-Circuit-Breaker
+  draft: false
+  prerelease: auto
+
+# `goreleaser release --snapshot` (and `build --snapshot`) skip publishing and
+# use this version template so local runs never need a git tag.
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
