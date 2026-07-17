@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: resilience-demo
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: resilience-demo
+  minAvailable: 1

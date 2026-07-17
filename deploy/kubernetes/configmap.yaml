@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resilience-demo-config
+  namespace: default
+data:
+  SERVER_ADDR: ":8080"
+  LOG_FORMAT: "json"
+  LOG_LEVEL: "info"
+  REDIS_ADDR: "redis:6379"
+  CORS_ORIGINS: "https://your-frontend.example.com"
+  OTEL_ENABLED: "false"
