@@ -317,13 +317,10 @@ func TestThreadPool_QueueFull_Rejected(t *testing.T) {
 		<-hold
 		return nil
 	})
-	// The first submit might succeed (worker picks it up) or queue it;
-	// either way we need the worker busy. Give it a moment.
-	if err == nil && ch != nil {
-		// Worker grabbed it; try again to fill the queue.
-		// With queueSize=0 the channel has no buffer, so subsequent Submit
-		// calls will always see the queue full when the worker is busy.
-	}
+	// The first submit might succeed (worker picks it up) or queue it; either
+	// way the worker is now busy, so subsequent Submits fill the queue.
+	_ = err
+	_ = ch
 
 	// Now try to submit more tasks. With a 0-depth queue these must be
 	// rejected once the worker is occupied.
