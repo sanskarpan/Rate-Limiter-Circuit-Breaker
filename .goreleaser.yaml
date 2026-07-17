@@ -75,18 +75,6 @@ signs:
       - "--yes"
     artifacts: checksum
     output: true
-  - id: all-artifacts
-    cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
-    args:
-      - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
-      - "${artifact}"
-      - "--yes"
-    artifacts: all
-    output: true
 
 # ─── Docker (multi-arch via per-arch images + a fat manifest) ─────────────────
 dockers:

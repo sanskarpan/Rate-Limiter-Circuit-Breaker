@@ -4,9 +4,13 @@ import (
 	"log/slog"
 	"sync/atomic"
 
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	metricprom "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric/prometheus"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/simulation"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // maxConcurrentSimulations bounds the number of in-flight /simulate calls
@@ -24,6 +28,9 @@ type Handlers struct {
 	logger    *slog.Logger
 	ready     *atomic.Bool
 	simEngine *simulation.Engine
+	// execBulkhead bounds concurrent CB executions so the demo exercises (and the
+	// Grafana dashboard populates) the bulkhead saturation metrics.
+	execBulkhead *bulkhead.Bulkhead
 	// simSem is a counting semaphore bounding concurrent simulations (M-19).
 	simSem chan struct{}
 }
@@ -45,6 +52,9 @@ func NewHandlers(
 		logger:    logger,
 		ready:     ready,
 		simEngine: simulation.New(logger),
-		simSem:    make(chan struct{}, maxConcurrentSimulations),
+		execBulkhead: bulkhead.New(64, 0,
+			bulkhead.WithName("cb-execute"),
+			bulkhead.WithRecorder(metricprom.New(prometheus.DefaultRegisterer))),
+		simSem: make(chan struct{}, maxConcurrentSimulations),
 	}
 }

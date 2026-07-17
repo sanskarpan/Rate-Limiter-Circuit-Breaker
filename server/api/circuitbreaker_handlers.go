@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
@@ -87,21 +88,30 @@ func (h *Handlers) HandleCBExecute(w http.ResponseWriter, r *http.Request) {
 		req.LatencyMs = 5000
 	}
 
-	var execErr error
-	cbErr := cb.Execute(r.Context(), func(ctx context.Context) error {
-		if req.LatencyMs > 0 {
-			select {
-			case <-time.After(time.Duration(req.LatencyMs) * time.Millisecond):
-			case <-ctx.Done():
-				return ctx.Err()
+	// Bound concurrent executions through a bulkhead (populates the bulkhead
+	// saturation metrics the Grafana dashboard queries).
+	var cbErr error
+	bhErr := h.execBulkhead.Execute(r.Context(), func(ctx context.Context) error {
+		cbErr = cb.Execute(ctx, func(ctx context.Context) error {
+			if req.LatencyMs > 0 {
+				select {
+				case <-time.After(time.Duration(req.LatencyMs) * time.Millisecond):
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
-		}
-		if req.SimulateFailure {
-			return errors.New("simulated failure")
-		}
+			if req.SimulateFailure {
+				return errors.New("simulated failure")
+			}
+			return nil
+		})
 		return nil
 	})
-	execErr = cbErr
+	if errors.Is(bhErr, bulkhead.ErrBulkheadFull) {
+		writeError(w, r, http.StatusServiceUnavailable, "bulkhead_full", "concurrency limit exceeded")
+		return
+	}
+	execErr := cbErr
 
 	snap := toSnapshotJSON(cb.Snapshot())
 	resp := cbResponse{
