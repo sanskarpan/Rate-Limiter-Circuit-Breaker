@@ -1,4 +1,13 @@
-// Package metrics provides Prometheus instrumentation for the resilience demo server.
+// Package metrics provides Prometheus instrumentation for the resilience demo
+// server's HTTP layer.
+//
+// The rate-limiter, circuit-breaker and bulkhead series are NO LONGER declared
+// here. They are emitted by the library core via the metric.Recorder interface
+// and its Prometheus adapter (metric/prometheus), which the demo server wires
+// over the default registry in main.go. This package now owns only the HTTP
+// server middleware metrics, avoiding a duplicate-registration conflict on the
+// shared registry (the adapter and this package would otherwise both try to
+// register resilience_ratelimit_requests_total).
 package metrics
 
 import (
@@ -6,47 +15,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Metrics holds all Prometheus metrics for the server.
+// Metrics holds the HTTP-layer Prometheus metrics for the server.
 type Metrics struct {
-	RateLimitTotal    *prometheus.CounterVec
-	RateLimitAllowed  *prometheus.CounterVec
-	RateLimitDenied   *prometheus.CounterVec
-	CBExecuteTotal    *prometheus.CounterVec
-	CBStateChanges    *prometheus.CounterVec
 	HTTPRequestsTotal *prometheus.CounterVec
 	HTTPDurationSecs  *prometheus.HistogramVec
 }
 
-// New creates and registers all Prometheus metrics.
+// New creates and registers the HTTP server metrics.
 func New(reg prometheus.Registerer) *Metrics {
 	factory := promauto.With(reg)
 
 	return &Metrics{
-		RateLimitTotal: factory.NewCounterVec(prometheus.CounterOpts{
-			Name: "resilience_ratelimit_requests_total",
-			Help: "Total number of rate limit check requests.",
-		}, []string{"algorithm"}),
-
-		RateLimitAllowed: factory.NewCounterVec(prometheus.CounterOpts{
-			Name: "resilience_ratelimit_allowed_total",
-			Help: "Total number of allowed rate limit requests.",
-		}, []string{"algorithm"}),
-
-		RateLimitDenied: factory.NewCounterVec(prometheus.CounterOpts{
-			Name: "resilience_ratelimit_denied_total",
-			Help: "Total number of denied rate limit requests.",
-		}, []string{"algorithm"}),
-
-		CBExecuteTotal: factory.NewCounterVec(prometheus.CounterOpts{
-			Name: "resilience_cb_executions_total",
-			Help: "Total number of circuit breaker execute calls.",
-		}, []string{"name", "result"}),
-
-		CBStateChanges: factory.NewCounterVec(prometheus.CounterOpts{
-			Name: "resilience_cb_state_changes_total",
-			Help: "Total number of circuit breaker state transitions.",
-		}, []string{"name", "from", "to"}),
-
 		HTTPRequestsTotal: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "resilience_http_requests_total",
 			Help: "Total number of HTTP requests.",
