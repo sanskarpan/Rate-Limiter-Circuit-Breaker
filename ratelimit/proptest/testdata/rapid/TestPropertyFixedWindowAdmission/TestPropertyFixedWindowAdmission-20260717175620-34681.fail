@@ -1,0 +1,144 @@
+# 2026/07/17 17:56:20.191635 [TestPropertyFixedWindowAdmission] [rapid] draw limit: 1
+# 2026/07/17 17:56:20.191648 [TestPropertyFixedWindowAdmission] [rapid] draw windowSec: 3
+# 2026/07/17 17:56:20.191651 [TestPropertyFixedWindowAdmission] [rapid] draw nSteps: 21
+# 2026/07/17 17:56:20.191652 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191652 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191653 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191653 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191653 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191654 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191654 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191654 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191655 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191655 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191655 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191656 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191656 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191656 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191656 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191658 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191658 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191659 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191659 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191659 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191660 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191660 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191660 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191660 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191660 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191661 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191661 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191661 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191661 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191662 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191662 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191662 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191662 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191663 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191663 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191663 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191664 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191664 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191664 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:56:20.191664 [TestPropertyFixedWindowAdmission] [rapid] draw advNum: 1
+# 2026/07/17 17:56:20.191665 [TestPropertyFixedWindowAdmission] [rapid] draw advDen: 2
+# 2026/07/17 17:56:20.191665 [TestPropertyFixedWindowAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:56:20.191665 [TestPropertyFixedWindowAdmission] [rapid] draw n: 1
+# 2026/07/17 17:56:20.191676 [TestPropertyFixedWindowAdmission] fixed window: window 0 admitted 2 tokens, exceeds limit 1
+# 
+v0.4.8#10207223890604408988
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0xc05c654ab866b
+0x14
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x1
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
