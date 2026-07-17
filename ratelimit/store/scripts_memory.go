@@ -28,6 +28,9 @@ func RegisterDefaultScripts(m *Memory) {
 	m.RegisterScript(SlidingWindowLogScript, m.slidingWindowLogHandler)
 	m.RegisterScript(SlidingWindowCounterScript, m.slidingWindowCounterHandler)
 	m.RegisterScript(FixedWindowScript, m.fixedWindowHandler)
+	m.RegisterScript(CircuitBreakerAcquireScript, m.cbAcquireHandler)
+	m.RegisterScript(CircuitBreakerRecordScript, m.cbRecordHandler)
+	m.RegisterScript(CircuitBreakerReadScript, m.cbReadHandler)
 }
 
 // NewMemoryWithScripts creates a Memory store with all default script handlers
@@ -687,4 +690,250 @@ func (z *zset) removeByScoreUpTo(cutoff int64) {
 	if idx > 0 {
 		z.members = z.members[idx:]
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Distributed circuit breaker emulation (mirrors CircuitBreaker*Script)
+// ---------------------------------------------------------------------------
+//
+// State per breaker key is serialized as a fixed 5-field record:
+//
+//	"state|failures|successes|opened_at|half_open_inflight"
+//
+// This mirrors the Redis hash used by the Lua scripts. The Redis scripts read the
+// server clock via TIME; the in-memory emulation instead reads `now_ns` from the
+// FINAL ARGV element supplied by the DistributedCircuitBreaker (from its injected
+// clock). Redis's Lua only indexes the ARGV positions it names, so passing this
+// trailing arg is harmless there while making the memory emulation deterministic
+// under a ManualClock. Keep these handlers in sync with the Lua scripts.
+
+type cbState struct {
+	state     int64
+	failures  int64
+	successes int64
+	openedAt  int64
+	inflight  int64
+}
+
+func parseCBState(s string) cbState {
+	var st cbState
+	if s == "" {
+		return st
+	}
+	parts := make([]int64, 0, 5)
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == '|' {
+			v, err := strconv.ParseInt(s[start:i], 10, 64)
+			if err != nil {
+				v = 0
+			}
+			parts = append(parts, v)
+			start = i + 1
+		}
+	}
+	if len(parts) >= 5 {
+		st.state, st.failures, st.successes, st.openedAt, st.inflight =
+			parts[0], parts[1], parts[2], parts[3], parts[4]
+	}
+	return st
+}
+
+func (st cbState) serialize() string {
+	return strconv.FormatInt(st.state, 10) + "|" +
+		strconv.FormatInt(st.failures, 10) + "|" +
+		strconv.FormatInt(st.successes, 10) + "|" +
+		strconv.FormatInt(st.openedAt, 10) + "|" +
+		strconv.FormatInt(st.inflight, 10)
+}
+
+// cbNowNs extracts the trailing now_ns arg (the DistributedCircuitBreaker's
+// clock). Falls back to time.Now() so the emulation still works if omitted.
+func cbNowNs(args []any) int64 {
+	if len(args) == 0 {
+		return time.Now().UnixNano()
+	}
+	v, err := toInt64(args[len(args)-1])
+	if err != nil || v <= 0 {
+		return time.Now().UnixNano()
+	}
+	return v
+}
+
+// cbAcquireHandler mirrors CircuitBreakerAcquireScript.
+// Args: [open_timeout_ns, half_open_max, ttl_ms, now_ns]
+// Returns: []any{decision int64, state int64}.
+func (m *Memory) cbAcquireHandler(keys []string, args []any) (any, error) {
+	if len(keys) < 1 {
+		return nil, fmt.Errorf("cbAcquireHandler: missing key")
+	}
+	if len(args) < 3 {
+		return nil, fmt.Errorf("cbAcquireHandler: expected >=3 args, got %d", len(args))
+	}
+	openTimeout, err := toInt64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	halfOpenMax, err := toInt64(args[1])
+	if err != nil {
+		return nil, err
+	}
+	ttlMs, err := toInt64(args[2])
+	if err != nil {
+		return nil, err
+	}
+	now := cbNowNs(args)
+
+	e, err := m.loadOrCreateRaw(keys[0])
+	if err != nil {
+		return nil, err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	st := parseCBState(e.value)
+
+	if st.state == 2 {
+		if st.openedAt <= 0 || (now-st.openedAt) < openTimeout {
+			return []any{int64(1), int64(2)}, nil // reject: still open
+		}
+		// OpenTimeout elapsed: promote Open -> HalfOpen.
+		st.state = 1
+		st.successes = 0
+		st.inflight = 0
+	}
+
+	if st.state == 1 {
+		if st.inflight >= halfOpenMax {
+			e.value = st.serialize()
+			m.setEntryTTLmsAbs(e, ttlMs)
+			return []any{int64(2), int64(1)}, nil // reject: probe limit
+		}
+		st.inflight++
+		e.value = st.serialize()
+		m.setEntryTTLmsAbs(e, ttlMs)
+		return []any{int64(0), int64(1)}, nil // allow (probe reserved)
+	}
+
+	// Closed.
+	e.value = st.serialize()
+	m.setEntryTTLmsAbs(e, ttlMs)
+	return []any{int64(0), int64(0)}, nil
+}
+
+// cbRecordHandler mirrors CircuitBreakerRecordScript.
+// Args: [outcome, failure_threshold, success_threshold, open_timeout_ns, ttl_ms,
+//
+//	acquired_probe, now_ns]
+//
+// Returns: []any{state int64}.
+func (m *Memory) cbRecordHandler(keys []string, args []any) (any, error) {
+	if len(keys) < 1 {
+		return nil, fmt.Errorf("cbRecordHandler: missing key")
+	}
+	if len(args) < 6 {
+		return nil, fmt.Errorf("cbRecordHandler: expected >=6 args, got %d", len(args))
+	}
+	outcome, err := toInt64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	failureThreshold, err := toInt64(args[1])
+	if err != nil {
+		return nil, err
+	}
+	successThreshold, err := toInt64(args[2])
+	if err != nil {
+		return nil, err
+	}
+	// args[3] open_timeout_ns and args[4] ttl_ms; open_timeout unused on record.
+	ttlMs, err := toInt64(args[4])
+	if err != nil {
+		return nil, err
+	}
+	acquiredProbe, err := toInt64(args[5])
+	if err != nil {
+		return nil, err
+	}
+	now := cbNowNs(args)
+
+	e, err := m.loadOrCreateRaw(keys[0])
+	if err != nil {
+		return nil, err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	st := parseCBState(e.value)
+
+	if acquiredProbe == 1 && st.inflight > 0 {
+		st.inflight--
+	}
+
+	openCircuit := func() {
+		st.state = 2
+		st.failures = 0
+		st.successes = 0
+		st.inflight = 0
+		st.openedAt = now
+	}
+	closeCircuit := func() {
+		st.state = 0
+		st.failures = 0
+		st.successes = 0
+		st.inflight = 0
+		st.openedAt = 0
+	}
+
+	switch st.state {
+	case 1: // half-open
+		if outcome == 1 {
+			openCircuit()
+		} else {
+			st.successes++
+			if st.successes >= successThreshold {
+				closeCircuit()
+			}
+		}
+	case 0: // closed
+		if outcome == 1 {
+			st.failures++
+			if st.failures >= failureThreshold {
+				openCircuit()
+			}
+		}
+	}
+
+	e.value = st.serialize()
+	m.setEntryTTLmsAbs(e, ttlMs)
+	return []any{st.state}, nil
+}
+
+// cbReadHandler mirrors CircuitBreakerReadScript (read-only).
+// Args: [open_timeout_ns, now_ns]
+// Returns: []any{state, failures, successes, opened_at, half_open_inflight}.
+func (m *Memory) cbReadHandler(keys []string, args []any) (any, error) {
+	if len(keys) < 1 {
+		return nil, fmt.Errorf("cbReadHandler: missing key")
+	}
+	if len(args) < 1 {
+		return nil, fmt.Errorf("cbReadHandler: expected >=1 arg, got %d", len(args))
+	}
+	openTimeout, err := toInt64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	now := cbNowNs(args)
+
+	e := m.loadEntry(keys[0])
+	if e == nil {
+		return []any{int64(0), int64(0), int64(0), int64(0), int64(0)}, nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := parseCBState(e.value)
+	if st.state == 2 && st.openedAt > 0 && (now-st.openedAt) >= openTimeout {
+		st.state = 1
+	}
+	return []any{st.state, st.failures, st.successes, st.openedAt, st.inflight}, nil
 }
