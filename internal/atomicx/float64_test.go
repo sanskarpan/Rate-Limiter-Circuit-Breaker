@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sanskarpan/resilience/internal/atomicx"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/atomicx"
 )
 
 func TestFloat64_LoadStore(t *testing.T) {
