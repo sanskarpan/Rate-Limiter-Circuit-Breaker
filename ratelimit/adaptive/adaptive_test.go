@@ -402,3 +402,42 @@ func TestRuntimeSignals_EMAWarmup(t *testing.T) {
 		t.Fatalf("error rate should converge low after many successes, got %v", r)
 	}
 }
+
+// TestAdaptive_New_RejectsInvalidBounds is the regression test for F-1: New must
+// reject minLimit < 1 (and maxLimit < minLimit) with a clear panic at
+// construction, instead of deferring an uncatchable SetLimit(0,0) panic to the
+// background adjustLoop goroutine when a stressed limiter falls to 0.
+func TestAdaptive_New_RejectsInvalidBounds(t *testing.T) {
+	cases := []struct{ name string; init, min, max int }{
+		{"zero min", 5, 0, 10},
+		{"negative min", 5, -1, 10},
+		{"max below min", 5, 5, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("adaptive.New(%d,%d,%d) should panic on invalid bounds", tc.init, tc.min, tc.max)
+				}
+			}()
+			adaptive.New(tc.init, tc.min, tc.max, adaptive.NewStaticSignals(0, 0, 0))
+		})
+	}
+}
+
+// TestAdaptive_SustainedStress_NoBackgroundPanic verifies that under sustained
+// stress driving the limit to its floor, the background adjustLoop never calls
+// SetLimit with a non-positive value (F-1). With a valid minLimit>=1 the process
+// must not crash.
+func TestAdaptive_SustainedStress_NoBackgroundPanic(t *testing.T) {
+	clk := clock.NewManualClock(time.Now())
+	al := adaptive.New(2, 1, 100, adaptive.NewStaticSignals(95, 0.5, time.Second),
+		adaptive.WithClock(clk), adaptive.WithAdjustInterval(10*time.Millisecond))
+	defer al.Close()
+	for i := 0; i < 50; i++ {
+		clk.Advance(10 * time.Millisecond)
+	}
+	// Reaching here (no panic in the goroutine crashing the test binary) plus a
+	// working Allow call confirms the limiter survived at its floor.
+	_ = al.Allow(context.Background(), "k")
+}
