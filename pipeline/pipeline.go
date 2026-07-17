@@ -171,12 +171,29 @@ func (b *Builder) CircuitBreaker(cb *circuitbreaker.CircuitBreaker) *Builder {
 	return b
 }
 
-// Retry adds a retry stage using the provided policy.
+// Retry adds a retry stage using the provided policy. If the policy already has
+// a Budget attached (p.Budget != nil), that shared retry budget is honoured, so
+// callers can retry-storm-guard the pipeline simply by passing a
+// budget-configured Policy.
 func (b *Builder) Retry(p *retry.Policy) *Builder {
 	b.stages = append(b.stages, builderStage{kindRetry, func(ctx context.Context, fn func(context.Context) error) error {
 		return p.Do(ctx, fn)
 	}})
 	return b
+}
+
+// RetryWithBudget adds a retry stage that shares the given retry budget
+// (retry-storm guard). The supplied policy is not mutated: a shallow copy with
+// budget attached is used, so the same *retry.Budget can be shared across
+// several pipelines/stages to cap their aggregate retry rate. A nil budget is
+// equivalent to Retry(p).
+func (b *Builder) RetryWithBudget(p *retry.Policy, budget *retry.Budget) *Builder {
+	if budget == nil {
+		return b.Retry(p)
+	}
+	pc := *p
+	pc.Budget = budget
+	return b.Retry(&pc)
 }
 
 // Use adds a custom stage. The stage wraps the downstream fn in any way.
