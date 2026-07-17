@@ -266,3 +266,25 @@ func TestRealClock_Since(t *testing.T) {
 		t.Errorf("Since() returned unexpected value: %v", elapsed)
 	}
 }
+
+// TestManualClock_Advance_NoDrainerNoDeadlock is a regression test for
+// CB-CLOCK-1: Advance spanning multiple ticker intervals must NOT block when
+// no consumer is draining the ticker channel (previously a blocking send
+// deadlocked). Guarded by a watchdog.
+func TestManualClock_Advance_NoDrainerNoDeadlock(t *testing.T) {
+	c := clock.NewManualClock(time.Now())
+	tk := c.NewTicker(10 * time.Millisecond)
+	defer tk.Stop()
+
+	done := make(chan struct{})
+	go func() {
+		// No one drains tk.C(); advancing 50 intervals must still return.
+		c.Advance(50 * 10 * time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Advance deadlocked with no ticker drainer (CB-CLOCK-1)")
+	}
+}
