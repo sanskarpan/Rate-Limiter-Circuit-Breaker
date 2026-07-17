@@ -6,8 +6,9 @@ on:
       # SemVer tags only (e.g. v1.2.3, v1.2.3-rc.1).
       - "v*"
 
+# Least-privilege defaults; the release job elevates what it needs.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ─── Test gate ──────────────────────────────────────────────────────────────
@@ -22,29 +23,22 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache: true
 
       - name: Run tests
         run: go test -race -count=1 ./...
 
-  # ─── Build cross-platform binaries ──────────────────────────────────────────
-  build:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+  # ─── Build, sign, publish via goreleaser ────────────────────────────────────
+  release:
+    name: Release
     runs-on: ubuntu-latest
     needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
+    permissions:
+      contents: write # create the GitHub Release + upload assets
+      packages: write # push images to GHCR
+      id-token: write # cosign keyless signing + SLSA provenance (OIDC)
+      attestations: write # actions/attest-build-provenance
     steps:
       - uses: actions/checkout@v7
         with:
@@ -52,50 +46,67 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache: true
 
-      - name: Build release binary
+      # Multi-arch Docker builds need QEMU (arm64 emulation) + buildx.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN has packages:write via the job permissions above;
+          # no separate secret is required for GHCR.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Supply-chain tooling: syft (SBOM) + cosign (keyless signing).
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Run goreleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Enables cosign keyless (Fulcio/Rekor) signing in CI.
+          COSIGN_EXPERIMENTAL: "1"
+          COSIGN_YES: "true"
+
+      # ─── SLSA provenance ──────────────────────────────────────────────────────
+      # Attest the released binaries (glob over goreleaser's dist/) so consumers
+      # can verify build provenance with `gh attestation verify`.
+      - name: Attest binary provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "dist/*.tar.gz"
+
+      # Attest the multi-arch container image by digest. goreleaser writes an
+      # artifacts.json describing pushed images; extract the manifest digest.
+      - name: Resolve pushed image digest
+        id: image
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          go build \
-            -ldflags="-s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version=${VERSION}" \
-            -o "bin/demo-server-${{ matrix.goos }}-${{ matrix.goarch }}" \
-            ./server/
+          set -euo pipefail
+          IMAGE="ghcr.io/sanskarpan/rate-limiter-circuit-breaker:${GITHUB_REF_NAME}"
+          DIGEST="$(docker buildx imagetools inspect "${IMAGE}" \
+            --format '{{ json .Manifest.Digest }}' | tr -d '"')"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+      - name: Attest container image provenance
+        uses: actions/attest-build-provenance@v1
         with:
-          name: demo-server-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: bin/demo-server-${{ matrix.goos }}-${{ matrix.goarch }}
-          retention-days: 1
-          if-no-files-found: error
-
-  # ─── Publish GitHub Release ─────────────────────────────────────────────────
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          # Each build job uploaded a single binary; flatten them all into ./bin.
-          path: bin
-          merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            bin/demo-server-linux-amd64
-            bin/demo-server-linux-arm64
-            bin/demo-server-darwin-amd64
-            bin/demo-server-darwin-arm64
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-') }}
+          subject-name: ghcr.io/sanskarpan/rate-limiter-circuit-breaker
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
