@@ -63,6 +63,10 @@ type GCRA struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // New creates a new GCRA with the given limit per window, burst size, and window duration.
@@ -112,7 +116,12 @@ func (g *GCRA) Allow(ctx context.Context, key string) ratelimit.Result {
 // Non-blocking. Safe for concurrent use.
 func (g *GCRA) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
 	start := g.clock.Now()
-	defer func() { g.record(res, start) }()
+	defer func() {
+		g.record(res, start)
+		if g.onDecision != nil {
+			g.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
@@ -121,15 +130,30 @@ func (g *GCRA) AllowN(_ context.Context, key string, n int) (res ratelimit.Resul
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
 	if n > g.burst {
-		return ratelimit.Result{
+		res = ratelimit.Result{
 			Allowed:   false,
 			Limit:     g.limit,
 			Remaining: 0,
 			Algorithm: algorithmName,
 		}
+		setCost(&res, n)
+		return res
 	}
 	e := g.getOrCreate(key)
-	return g.consume(e, n)
+	res = g.consume(e, n)
+	if n != 1 {
+		setCost(&res, n)
+	}
+	return res
+}
+
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free.
+func setCost(res *ratelimit.Result, cost int) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
 }
 
 // record fires the configured metric.Recorder for a completed decision. With

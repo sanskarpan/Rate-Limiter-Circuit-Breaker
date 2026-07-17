@@ -57,10 +57,27 @@ type SlidingWindowCounter struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // CounterOption configures a SlidingWindowCounter.
 type CounterOption func(*SlidingWindowCounter)
+
+// WithCounterOnDecision registers a hook fired after every Allow/AllowN
+// decision (both allow and deny), receiving the key and the resulting Result.
+// The default is nil (a cheap no-op guarded by a nil check on the hot path).
+// The hook runs synchronously on the calling goroutine before the decision is
+// returned, so keep it fast and non-blocking. A nil hook is ignored.
+func WithCounterOnDecision(fn func(key string, r ratelimit.Result)) CounterOption {
+	return func(swc *SlidingWindowCounter) {
+		if fn != nil {
+			swc.onDecision = fn
+		}
+	}
+}
 
 // WithCounterClock sets the clock for testing.
 func WithCounterClock(c clock.Clock) CounterOption {
@@ -116,7 +133,15 @@ func (swc *SlidingWindowCounter) Allow(ctx context.Context, key string) ratelimi
 // AllowN checks if n requests are allowed (approximately).
 func (swc *SlidingWindowCounter) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
 	start := swc.clock.Now()
-	defer func() { swc.record(res, start) }()
+	defer func() {
+		if n != 1 {
+			setCost(&res, n)
+		}
+		swc.record(res, start)
+		if swc.onDecision != nil {
+			swc.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: counterAlgorithmName}
@@ -126,6 +151,16 @@ func (swc *SlidingWindowCounter) AllowN(_ context.Context, key string, n int) (r
 	}
 	kc := swc.getOrCreate(key)
 	return swc.consume(kc, n)
+}
+
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free. Shared
+// by both sliding-window limiters in this package.
+func setCost(res *ratelimit.Result, cost int) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
 }
 
 // record fires the configured metric.Recorder for a completed decision. With

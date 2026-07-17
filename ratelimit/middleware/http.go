@@ -48,9 +48,15 @@ func KeyByParam(name string) KeyFunc {
 	}
 }
 
+// CostFunc computes the token cost (weight) of an HTTP request. A bulk write can
+// cost more than a health check. It must return a positive value; a value < 1 is
+// clamped to 1 so a request always consumes at least one token.
+type CostFunc func(r *http.Request) int
+
 // options holds middleware configuration.
 type options struct {
 	keyFunc      KeyFunc
+	costFunc     CostFunc
 	onLimited    func(w http.ResponseWriter, r *http.Request, result ratelimit.Result)
 	skipFunc     func(r *http.Request) bool
 	errorHandler func(w http.ResponseWriter, r *http.Request, err error)
@@ -62,6 +68,15 @@ type Option func(*options)
 // WithKeyFunc sets a custom key extraction function.
 func WithKeyFunc(fn KeyFunc) Option {
 	return func(o *options) { o.keyFunc = fn }
+}
+
+// WithCost sets a function that computes the token cost (weight) of each request.
+// The middleware calls AllowN(ctx, key, cost) with the computed cost instead of
+// consuming a single token. Costs below 1 are clamped to 1. Default: every
+// request costs 1. This models weighted/points-based rate limits (GitHub,
+// Stripe, Shopify), where an expensive operation drains the bucket faster.
+func WithCost(fn CostFunc) Option {
+	return func(o *options) { o.costFunc = fn }
 }
 
 // WithOnLimited sets a custom handler called when a request is rate limited.
@@ -122,11 +137,25 @@ func RateLimit(limiter ratelimit.Limiter, opts ...Option) func(http.Handler) htt
 			}
 
 			key := o.keyFunc(r)
-			result := limiter.Allow(r.Context(), key)
+
+			cost := 1
+			if o.costFunc != nil {
+				if c := o.costFunc(r); c > 1 {
+					cost = c
+				}
+			}
+
+			var result ratelimit.Result
+			if cost == 1 {
+				result = limiter.Allow(r.Context(), key)
+			} else {
+				result = limiter.AllowN(r.Context(), key, cost)
+			}
 
 			// Set standard rate limit headers.
 			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", result.Limit))
 			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
+			w.Header().Set("X-RateLimit-Cost", fmt.Sprintf("%d", cost))
 			if result.ResetAfter > 0 {
 				resetAt := time.Now().Add(result.ResetAfter)
 				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetAt.Unix()))
