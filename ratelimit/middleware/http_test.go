@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/middleware"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 )
 
 // mockLimiter is a test double for ratelimit.Limiter.
