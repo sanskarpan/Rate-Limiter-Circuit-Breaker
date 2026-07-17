@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
 func Example() {

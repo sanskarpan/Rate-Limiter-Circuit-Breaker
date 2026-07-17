@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 )
 
 // TestM8_RetripWhileOpen_RefreshesOpenedAt verifies the chosen M-8 semantics:
