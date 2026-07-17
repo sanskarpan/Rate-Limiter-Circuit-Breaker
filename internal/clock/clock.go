@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// tickerChanBuffer is the buffer depth of a ManualClock ticker channel. It lets
+// a single Advance spanning many intervals deposit one tick per interval
+// without blocking, while still coalescing (dropping) once a consumer falls
+// this far behind — matching real time.Ticker behaviour.
+const tickerChanBuffer = 1024
+
 // Clock is the time source interface used by all rate limiting algorithms.
 // Use RealClock in production and ManualClock in tests.
 type Clock interface {
@@ -211,8 +217,13 @@ func (c *ManualClock) NewTicker(d time.Duration) Ticker {
 	t := &manualTicker{
 		interval: d,
 		nextFire: c.now.Add(d),
-		ch:       make(chan time.Time, 1),
-		clock:    c,
+		// Generously buffered so a single Advance spanning many intervals can
+		// deposit one tick per interval without blocking the advancer (M-17a),
+		// while still coalescing (dropping) once the consumer falls this far
+		// behind — matching real time.Ticker semantics and, crucially, never
+		// deadlocking Advance when no consumer is draining concurrently.
+		ch:    make(chan time.Time, tickerChanBuffer),
+		clock: c,
 	}
 	c.tickers = append(c.tickers, t)
 	return t
@@ -269,12 +280,13 @@ func (c *ManualClock) Advance(d time.Duration) {
 	copy(tickers, c.tickers)
 	c.mu.Unlock()
 
-	// Fire tickers. For each interval crossed we deliver one tick so that
-	// advancing N intervals yields N ticks (M-17a). We first try a
-	// non-blocking send onto the buffered-1 channel; if it is full we send
-	// blockingly so ready consumers are not silently dropped. Real tickers
-	// coalesce only when the consumer is not keeping up; here the buffer
-	// plus the blocking fallback preserves reasonable semantics.
+	// Fire tickers. For each interval crossed we deliver one tick (into the
+	// generously-buffered channel) so that advancing N intervals yields N
+	// ticks (M-17a). The send is strictly non-blocking: if the buffer is full
+	// (a consumer that has fallen tickerChanBuffer ticks behind) we drop the
+	// tick, exactly as a real time.Ticker coalesces under a slow consumer.
+	// This must never block, otherwise Advance would deadlock whenever no
+	// consumer is draining concurrently (CB-CLOCK-1).
 	for _, tick := range tickers {
 		tick.mu.Lock()
 		if tick.stopped {
@@ -284,19 +296,10 @@ func (c *ManualClock) Advance(d time.Duration) {
 		for !tick.nextFire.After(target) {
 			fireAt := tick.nextFire
 			tick.nextFire = tick.nextFire.Add(tick.interval)
-			ch := tick.ch
 			select {
-			case ch <- fireAt:
+			case tick.ch <- fireAt:
 			default:
-				// Buffer full: release tick.mu and block until the
-				// consumer drains, so ticks are not dropped. Holding no
-				// other lock here keeps the lock order clean.
-				tick.mu.Unlock()
-				ch <- fireAt
-				tick.mu.Lock()
-				if tick.stopped {
-					break
-				}
+				// Buffer full: coalesce (drop), like a real ticker. Never block.
 			}
 		}
 		tick.mu.Unlock()

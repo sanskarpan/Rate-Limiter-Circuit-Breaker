@@ -82,6 +82,24 @@ type AdaptiveLimiter struct {
 // initialLimit is the starting rate limit (requests/second).
 // minLimit and maxLimit bound how far the limit can adjust.
 func New(initialLimit, minLimit, maxLimit int, signals SignalSource, opts ...Option) *AdaptiveLimiter {
+	// Validate bounds. The underlying token bucket requires refillRate > 0, and
+	// every adjustment routes through SetLimit(limit, limit) (H-12). Without
+	// these guards a minLimit < 1 lets a stressed limiter fall to 0 and call
+	// SetLimit(0, 0), which panics in the background adjustLoop goroutine — an
+	// uncatchable process crash (F-1). Fail fast and clearly here, consistent
+	// with the other limiters' constructors.
+	if minLimit < 1 {
+		panic("adaptive.New: minLimit must be >= 1")
+	}
+	if maxLimit < minLimit {
+		panic("adaptive.New: maxLimit must be >= minLimit")
+	}
+	if initialLimit < minLimit {
+		initialLimit = minLimit
+	}
+	if initialLimit > maxLimit {
+		initialLimit = maxLimit
+	}
 	al := &AdaptiveLimiter{
 		signals:        signals,
 		minLimit:       minLimit,

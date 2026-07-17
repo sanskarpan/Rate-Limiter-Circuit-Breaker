@@ -222,7 +222,7 @@ func TestComposite_Wait_BlocksUntilAllowed(t *testing.T) {
 	lim := tokenbucket.New(1, 1, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, lim).WithClock(clk)
 	defer comp.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

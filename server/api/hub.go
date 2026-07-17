@@ -126,6 +126,20 @@ func (h *Hub) Run() {
 		case c := <-h.register:
 			h.mu.Lock()
 			h.clients[c] = true
+			// Send the welcome from inside the hub goroutine — the only place
+			// that ever closes c.send (done/unregister cases) — so it can never
+			// race a concurrent close and panic (F-3). Non-blocking: a fresh
+			// client's 64-slot buffer has room.
+			welcome, _ := json.Marshal(Event{
+				Type: "connected",
+				Name: c.filter,
+				Data: map[string]string{"filter": c.filter},
+				TS:   time.Now().UnixMilli(),
+			})
+			select {
+			case c.send <- welcome:
+			default:
+			}
 			h.mu.Unlock()
 
 		case c := <-h.unregister:
