@@ -1,0 +1,173 @@
+# Default values for the resilience-demo chart.
+# These reproduce the hardened deploy/kubernetes/* manifests as parameters.
+
+# -- Number of replicas (ignored when autoscaling.enabled=true).
+replicaCount: 3
+
+image:
+  # -- Container image repository (multi-arch image published to GHCR).
+  repository: ghcr.io/sanskarpan/rate-limiter-circuit-breaker
+  # -- Image tag. Defaults to the chart appVersion when empty.
+  tag: ""
+  # -- Image pull policy.
+  pullPolicy: Always
+
+# -- Image pull secrets for private registries.
+imagePullSecrets: []
+# -- Override the chart name used in resource names.
+nameOverride: ""
+# -- Override the fully-qualified release name.
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount.
+  create: true
+  # -- Annotations for the ServiceAccount (e.g. IRSA/Workload Identity).
+  annotations: {}
+  # -- Explicit ServiceAccount name; generated when empty.
+  name: ""
+  # -- Auto-mount the API token into pods (the demo needs no API access).
+  automountServiceAccountToken: false
+
+# -- Extra pod labels merged onto the deployment template.
+podLabels:
+  version: v1
+
+# -- Extra pod annotations merged onto the deployment template.
+podAnnotations: {}
+
+# Prometheus scrape annotations added to the pod template.
+prometheus:
+  # -- Emit prometheus.io/* scrape annotations on the pods.
+  scrape: true
+  # -- Metrics port advertised to Prometheus.
+  port: 8080
+  # -- Metrics path advertised to Prometheus.
+  path: /metrics
+
+# Pod-level security context (nonroot, distinct fsGroup) matching the base manifest.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+# Container-level hardening: no privilege escalation, read-only rootfs, all caps dropped.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type.
+  type: ClusterIP
+  # -- Service port.
+  port: 80
+  # -- Container/target port name.
+  targetPort: http
+  # -- Extra annotations for the Service.
+  annotations: {}
+
+# HTTP port the container listens on.
+containerPort: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Liveness/readiness probes hitting the split health endpoints.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 3
+
+# Rolling-update strategy from the base manifest.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Grace period for in-flight requests to drain on shutdown.
+terminationGracePeriodSeconds: 15
+
+# ─── Application configuration (rendered into a ConfigMap, injected via envFrom) ─
+config:
+  SERVER_ADDR: ":8080"
+  LOG_FORMAT: "json"
+  LOG_LEVEL: "info"
+  CORS_ORIGINS: "https://your-frontend.example.com"
+
+# API-key auth. When enabled, the key is stored in a Secret and injected as API_KEY.
+auth:
+  # -- Enable API-key authentication on protected endpoints.
+  enabled: false
+  # -- API key value (stored in a Kubernetes Secret; use --set or a values override).
+  apiKey: ""
+  # -- Use a pre-existing Secret instead of creating one; must expose key API_KEY.
+  existingSecret: ""
+
+# Redis backend for distributed rate limiting. When disabled, REDIS_ADDR is unset
+# and the server uses in-memory limits.
+redis:
+  # -- Enable the distributed (Redis) backend.
+  enabled: false
+  # -- Redis address (host:port).
+  addr: "redis:6379"
+
+# OpenTelemetry tracing export.
+otel:
+  # -- Enable OTEL trace export.
+  enabled: false
+  # -- OTLP exporter endpoint (host:port).
+  endpoint: ""
+
+# -- Additional raw environment variables (list of {name,value}).
+extraEnv: []
+
+autoscaling:
+  # -- Enable a HorizontalPodAutoscaler.
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+
+podDisruptionBudget:
+  # -- Enable a PodDisruptionBudget.
+  enabled: true
+  # -- Minimum available pods during voluntary disruptions.
+  minAvailable: 1
+  # -- Maximum unavailable pods (set instead of minAvailable; leave empty to use minAvailable).
+  maxUnavailable: ""
+
+# -- Node selector for pod scheduling.
+nodeSelector: {}
+# -- Tolerations for pod scheduling.
+tolerations: []
+# -- Affinity rules for pod scheduling.
+affinity: {}
