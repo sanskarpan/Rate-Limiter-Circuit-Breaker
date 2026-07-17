@@ -126,8 +126,5 @@ func (c *Config) defaults() {
 // defaultIsFailure counts all non-nil errors as failures.
 // Context cancellation is NOT counted by default per the spec.
 func defaultIsFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	return true
+	return err != nil
 }
