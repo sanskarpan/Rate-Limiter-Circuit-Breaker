@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
 
 // Option configures a GCRA limiter.
@@ -13,6 +14,17 @@ type Option func(*GCRA)
 func WithClock(c clock.Clock) Option {
 	return func(g *GCRA) {
 		g.clock = c
+	}
+}
+
+// WithRecorder wires a metric.Recorder so allow/deny decisions and decision
+// latency are emitted. Defaults to metric.Default() (a no-op) when unset. A nil
+// recorder is ignored.
+func WithRecorder(rec metric.Recorder) Option {
+	return func(g *GCRA) {
+		if rec != nil {
+			g.rec = rec
+		}
 	}
 }
 
