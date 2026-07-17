@@ -13,16 +13,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/ratelimit/fixedwindow"
-	"github.com/sanskarpan/resilience/ratelimit/gcra"
-	"github.com/sanskarpan/resilience/ratelimit/leakybucket"
-	"github.com/sanskarpan/resilience/ratelimit/slidingwindow"
-	"github.com/sanskarpan/resilience/ratelimit/tokenbucket"
-	"github.com/sanskarpan/resilience/server/api"
-	"github.com/sanskarpan/resilience/server/config"
-	"github.com/sanskarpan/resilience/server/version"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/leakybucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/slidingwindow"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/api"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/config"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version"
 )
 
 func main() {
