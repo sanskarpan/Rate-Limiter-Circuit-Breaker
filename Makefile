@@ -41,6 +41,23 @@ bench-compare: ## Compare benchmarks: make bench-compare OLD=main NEW=HEAD
 	git checkout $(NEW) && git stash pop && go test -bench=. -benchmem -count=10 ./... > /tmp/new.txt
 	benchstat /tmp/old.txt /tmp/new.txt
 
+vuln: ## Scan for known vulnerabilities (govulncheck)
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+test-e2e: ## Run Playwright E2E: builds+starts server (:8080) & frontend (:3000), then runs tests
+	@echo "Building demo server..."
+	@CGO_ENABLED=0 go build -o bin/demo-server ./server/
+	@echo "Starting demo server on :8080..."
+	@./bin/demo-server > /tmp/demo-server.log 2>&1 & echo $$! > /tmp/demo-server.pid
+	@for i in $$(seq 1 60); do curl -fsS http://localhost:8080/health/live >/dev/null 2>&1 && break; sleep 1; done
+	@echo "Building & starting frontend on :3000..."
+	@cd frontend && npm ci && npx playwright install --with-deps chromium && npm run build
+	@cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8080 npm run start > /tmp/frontend.log 2>&1 & echo $$! > /tmp/frontend.pid
+	@for i in $$(seq 1 60); do curl -fsS http://localhost:3000 >/dev/null 2>&1 && break; sleep 1; done
+	@cd frontend && npm run test:e2e; status=$$?; \
+		kill `cat /tmp/demo-server.pid` `cat /tmp/frontend.pid` 2>/dev/null || true; \
+		exit $$status
+
 lint: ## Run all linters
 	golangci-lint run --timeout 5m
 
