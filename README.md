@@ -1,303 +1,403 @@
 # Resilience
 
-[![Go Version](https://img.shields.io/badge/go-1.24-blue.svg)](https://golang.org)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)](https://goreportcard.com/report/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
-[![pkg.go.dev](https://pkg.go.dev/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker.svg)](https://pkg.go.dev/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
+A production-grade Go toolkit for rate limiting, circuit breaking, and resilience patterns — with **zero external runtime dependencies** in the core library.
 
-A production-grade Go library for rate limiting, circuit breaking, and resilience patterns — with **zero external runtime dependencies** in the core library.
+[![CI](https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/actions/workflows/ci.yml/badge.svg)](https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)](https://goreportcard.com/report/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
+[![Go Reference](https://pkg.go.dev/badge/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker.svg)](https://pkg.go.dev/github.com/sanskarpan/Rate-Limiter-Circuit-Breaker)
+<!-- Coverage populates after the first CI run uploads a report to Codecov. -->
+[![codecov](https://codecov.io/gh/sanskarpan/Rate-Limiter-Circuit-Breaker/branch/main/graph/badge.svg)](https://codecov.io/gh/sanskarpan/Rate-Limiter-Circuit-Breaker)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## Why this exists
+
+Most Go services eventually need to protect themselves and their dependencies:
+throttle abusive clients, stop hammering a failing downstream, cap concurrency,
+retry transient errors, and fall back gracefully. These patterns are usually
+copy-pasted, subtly wrong, or pulled in as heavyweight frameworks.
+
+This library provides each pattern as a small, correct, well-tested building
+block behind a single consistent interface — and lets you compose them into a
+resilience pipeline. The **core packages have zero external runtime
+dependencies**; Redis (for distributed rate limiting) and gRPC (for
+interceptors) are only needed if you use those optional adapters. Every rate
+limiter shares the same `ratelimit.Limiter` interface, so switching algorithms
+or going from single-instance to distributed is a one-line change.
 
 ---
 
 ## Features
 
-| Package | Description |
-|---------|-------------|
-| `ratelimit/tokenbucket` | Classic token bucket — smooth rate with configurable burst |
-| `ratelimit/gcra` | Generic Cell Rate Algorithm — precise, low-allocation |
-| `ratelimit/slidingwindow` | Sliding window (log and counter variants) |
-| `ratelimit/fixedwindow` | Fixed-window counter — minimal memory footprint |
-| `ratelimit/leakybucket` | Leaky bucket — queue-based request shaping |
-| `ratelimit/adaptive` | Adaptive limiter — adjusts rate based on error rate |
-| `ratelimit/composite` | Composite — apply multiple limiters in sequence or parallel |
-| `circuitbreaker` | Count- and time-based circuit breaker with half-open probe |
-| `bulkhead` | Semaphore-based concurrency limiter + thread pool |
-| `retry` | Retry with fixed, exponential, jitter, and linear backoff |
-| `timeout` | Context-based timeout wrapper |
-| `fallback` | Fallback, hedge, and speculative execution |
-| `pipeline` | Composable policy pipeline (RateLimit → Bulkhead → Timeout → CB → Retry) |
-| `ratelimit/middleware` | HTTP and gRPC middleware for rate limiting |
-| `circuitbreaker/middleware` | HTTP and gRPC middleware for circuit breaking |
-| `ratelimit/store` | Redis store adapter for distributed rate limiting |
+| Package | What it does | Key property |
+|---------|--------------|--------------|
+| `ratelimit` | Core `Limiter` interface (`Allow`/`AllowN`/`Wait`/`Peek`/`Reset`) | Uniform API across all algorithms |
+| `ratelimit/tokenbucket` | Token bucket — smooth rate with configurable burst | O(1), 0 allocs, lazy refill |
+| `ratelimit/gcra` | Generic Cell Rate Algorithm | One timestamp per key, exact, Redis-optimal |
+| `ratelimit/slidingwindow` | Sliding window (log + counter variants) | Log = exact; counter = O(keys) approximate |
+| `ratelimit/fixedwindow` | Fixed-window counter | Simplest, lowest memory |
+| `ratelimit/leakybucket` | Leaky bucket — constant-rate output shaping | Strictly constant drain rate |
+| `ratelimit/adaptive` | Adaptive limiter — retunes on latency/error signals | Dynamic load shedding |
+| `ratelimit/composite` | Combine limiters with AND / OR logic | Layer burst + sustained limits |
+| `ratelimit/store` | In-memory and Redis store adapters | Atomic Lua scripts, fail-open/closed |
+| `ratelimit/middleware` | HTTP and gRPC rate-limit middleware | Standard `X-RateLimit-*` headers |
+| `circuitbreaker` | Count- and time-based breaker with half-open probing | Fast-fail on failing dependencies |
+| `circuitbreaker/middleware` | HTTP and gRPC circuit-breaker middleware | 503 on open, streams response |
+| `retry` | Retry policy with pluggable backoff | Context-aware, `RetryIf` predicate |
+| `retry/backoff` | Constant, exponential, full-jitter, decorrelated | AWS-style jitter strategies |
+| `timeout` | Context-based timeout wrapper | Generic `DoWithResult` helper |
+| `fallback` | Fallback, hedge, and hedged N-copy execution | Reduce tail latency |
+| `bulkhead` | Semaphore-based concurrency limiter | Bounded in-flight work |
+| `pipeline` | Composable policy pipeline | Fixed correct stage order |
 
 ---
 
-## Quick Start
+## 30-second quickstart
 
-```go
-import (
-    "net/http"
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
-    ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
-)
-
-limiter := tokenbucket.New(100, 20) // 100 req/s, burst of 20
-http.Handle("/api/", ratelimitmw.RateLimit(limiter)(myHandler))
-http.ListenAndServe(":8080", nil)
+```bash
+go get github.com/sanskarpan/Rate-Limiter-Circuit-Breaker@latest
 ```
 
----
+```go
+package main
 
-## Algorithm Comparison
+import (
+	"context"
+	"fmt"
 
-| Algorithm | Burst | Exact | Memory | Distributed | Use When |
-|-----------|-------|-------|--------|-------------|----------|
-| Token Bucket | ✅ | ✅ | O(keys) | ✅ | API rate limiting, smooth traffic |
-| GCRA | ✅ | ✅ | O(keys) | ✅ | High-performance APIs, low allocs |
-| Sliding Window Log | ❌ | ✅ | O(req) | ✅ | Exact counting required |
-| Sliding Window Counter | ❌ | ~✅ | O(keys) | ✅ | Low memory, near-exact |
-| Fixed Window | ❌ | ✅ | O(keys) | ✅ | Simple, fastest |
-| Leaky Bucket | ❌ | ✅ | O(keys) | ❌ | Queue-based smoothing |
-| Adaptive | ✅ | ~✅ | O(keys) | ❌ | Dynamic load shedding |
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+)
 
----
+func main() {
+	// capacity=10 (burst), refill=5 tokens/second (sustained rate).
+	limiter := tokenbucket.New(10, 5)
+	defer limiter.Close()
 
-## Performance Benchmarks
+	result := limiter.Allow(context.Background(), "user:123")
+	if !result.Allowed {
+		fmt.Printf("rate limited, retry after %s\n", result.RetryAfter)
+		return
+	}
+	fmt.Printf("allowed, %d tokens remaining\n", result.Remaining)
+}
+```
 
-All benchmarks run on Apple M-series (11 cores), Go 1.24, `GOMAXPROCS=11`.
-
-| Algorithm | Single Key (ns/op) | Parallel (ns/op) | Allocs/op |
-|-----------|--------------------|------------------|-----------|
-| Token Bucket | 62 | 167 | 0 |
-| GCRA | 67 | 195 | 0 |
-| Fixed Window | 69 | 188 | 0 |
-| Sliding Window Counter | 75 | 203 | 0 |
-| Sliding Window Log | 93 | — | 0 |
-| Circuit Breaker (closed) | 82 | 169 | 0 |
-| Circuit Breaker (open) | 45 | — | 1 |
+> **Constructor convention:** `tokenbucket.New(capacity, refillRate)` — the first
+> argument is the burst capacity, the second is the sustained refill rate in
+> tokens/second.
 
 ---
 
-## API Documentation
+## Examples
 
-### Rate Limiting
-
-#### Token Bucket
+### Token bucket
 
 ```go
 import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 
-// New creates a local token bucket limiter.
-// rate: tokens added per second
-// capacity: maximum burst size
-limiter := tokenbucket.New(100, 20)
+limiter := tokenbucket.New(100, 20) // burst 100, 20 tokens/s sustained
 defer limiter.Close()
 
+// Single token, non-blocking.
 result := limiter.Allow(ctx, "user:123")
-if !result.Allowed {
-    // result.RetryAfter contains how long to wait
-    http.Error(w, "rate limited", http.StatusTooManyRequests)
-    return
-}
 
-// Consume N tokens at once
+// Consume N tokens atomically (all-or-nothing).
 result = limiter.AllowN(ctx, "user:123", 5)
 
-// Non-blocking peek (does not consume tokens)
+// Inspect state without consuming.
 state := limiter.Peek(ctx, "user:123")
 
-// Block until a token is available (respects context cancellation)
+// Block until a token frees up (respects ctx cancellation).
 if err := limiter.Wait(ctx, "user:123"); err != nil {
-    // ctx cancelled or deadline exceeded
+	// ctx cancelled or deadline exceeded
 }
 
-// Reset a key (for testing or admin operations)
-limiter.Reset(ctx, "user:123")
+// Clear a key (admin/testing).
+_ = limiter.Reset(ctx, "user:123")
 ```
 
-#### GCRA
-
-```go
-import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
-
-// New creates a GCRA limiter.
-// rate: max requests per second
-// burstSeconds: burst capacity in seconds (EmissionInterval * burst)
-limiter := gcra.New(gcra.Options{Rate: 100, BurstSeconds: 0.2})
-```
-
-#### Composite Limiter
+### GCRA
 
 ```go
 import (
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
+	"time"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
 )
 
-// Both must allow for the request to proceed
-combined := composite.NewAND(
-    tokenbucket.New(100, 20),   // 100 req/s per key
-    fixedwindow.New(1000, time.Hour), // 1000 req/hour global
-)
+// limit=10 per window, burst=3, window=1s → smooth 10 req/s allowing 3 upfront.
+limiter := gcra.New(10, 3, time.Second)
+defer limiter.Close()
+
+result := limiter.Allow(ctx, "api-key:xyz")
 ```
 
----
-
-### Circuit Breaker
+### Circuit breaker
 
 ```go
-import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+import (
+	"errors"
+	"time"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+)
 
 cb := circuitbreaker.New(circuitbreaker.Config{
-    Name:             "my-service",
-    WindowType:       circuitbreaker.CountBased, // or TimeBased
-    WindowSize:       100,                       // last 100 calls
-    FailureThreshold: 50,                        // open at 50% failure rate
-    OpenTimeout:      30 * time.Second,
+	Name:             "payments",
+	WindowType:       circuitbreaker.CountBased, // or circuitbreaker.TimeBased
+	WindowSize:       10,                        // track the last 10 calls
+	FailureThreshold: 5,                         // open after 5 failures
+	OpenTimeout:      30 * time.Second,          // stay open before half-open probe
 })
 
 err := cb.Execute(ctx, func(ctx context.Context) error {
-    return callDownstreamService(ctx)
+	return callDownstream(ctx)
 })
-
 if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
-    // Circuit is open — use fallback or return error to caller
+	// circuit open — fast-fail, use a fallback
 }
 
-// Get current state and metrics
 snap := cb.Snapshot()
-fmt.Printf("state=%s failures=%d failure_rate=%.2f\n",
-    snap.State, snap.Failures, snap.FailureRate)
+fmt.Printf("state=%s failures=%d rate=%.2f\n", snap.State, snap.Failures, snap.FailureRate)
 ```
 
----
+### Resilience pipeline
 
-### Pipeline
+Composes several patterns in a fixed, production-correct order. `Build()`
+sorts stages into: rate limit → bulkhead → timeout → circuit breaker → retry,
+regardless of the order you call the builder methods.
 
 ```go
 import (
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
+	"time"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 p := pipeline.New().
-    RateLimit(limiter, pipeline.KeyByValue("api")).
-    Bulkhead(10, 100*time.Millisecond). // max 10 concurrent, 100ms wait
-    Timeout(2 * time.Second).
-    CircuitBreaker(cb).
-    Retry(&retry.Policy{
-        MaxAttempts: 3,
-        Backoff:     backoff.Exponential(100*time.Millisecond, 2.0),
-    }).
-    Build()
+	RateLimit(limiter, pipeline.KeyByValue("api")).
+	Bulkhead(10, 100*time.Millisecond). // max 10 concurrent, wait up to 100ms for a slot
+	Timeout(2 * time.Second).
+	CircuitBreaker(cb).
+	Retry(&retry.Policy{
+		MaxAttempts: 3,
+		Backoff:     backoff.Exponential(100*time.Millisecond, 2*time.Second),
+	}).
+	Build()
 
 err := p.Execute(ctx, func(ctx context.Context) error {
-    return callBackend(ctx)
+	return callBackend(ctx)
 })
 ```
 
+### Distributed rate limiting (Redis)
+
+Distributed limiters implement the same `Limiter` interface — swapping in Redis
+is a constructor change. All distributed algorithms use atomic Lua scripts (no
+`WATCH`/`MULTI`/`EXEC` round-trips).
+
+```go
+import (
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
+)
+
+s := store.NewRedis(store.RedisOptions{
+	Addr:      "localhost:6379",
+	KeyPrefix: "myapp:rl:",
+})
+defer s.Close()
+
+// NewDistributed(rate, capacity, store, prefix): 20 tokens/s, burst 20, shared globally.
+limiter := tokenbucket.NewDistributed(20, 20, s, "api")
+result := limiter.Allow(ctx, "user:123") // Redis key: api:tokenbucket:user:123
+```
+
+See [docs/distributed.md](docs/distributed.md) for fallback behaviour, key
+naming, and Redis Cluster notes.
+
 ---
 
-### HTTP Middleware
+## When to use which algorithm
+
+| Algorithm | Burst | Precision | Memory | Distributed | Use when |
+|-----------|:-----:|-----------|:------:|:-----------:|----------|
+| `token_bucket` | Yes | Exact | O(keys) | Yes | General API rate limiting; smooth traffic with allowed spikes |
+| `gcra` | Yes | Exact | O(keys) | Yes (best) | High-throughput APIs; precise burst control; Redis-efficient |
+| `sliding_window` (log) | No | Exact | O(requests) | Yes | Exact counting required; memory grows with request volume |
+| `sliding_window` (counter) | No | ~99% | O(keys) | Yes | High volume, low memory; small boundary approximation acceptable |
+| `fixed_window` | No | Exact-in-window | O(keys) | Yes | Simplest, cheapest; boundary burst of up to 2× limit is acceptable |
+| `leaky_bucket` | No | Exact | O(keys+queue) | No | Strictly constant output rate; smoothing bursty input; adds queue latency |
+| `adaptive` | Yes | Dynamic | O(keys) | No | Load shedding — retunes the limit from live latency/error signals |
+
+Rules of thumb:
+
+- **Need burst + smooth sustained rate?** `token_bucket` (well understood) or
+  `gcra` (Redis-optimal, minimal memory).
+- **Need strictly constant downstream rate (e.g. a partner SLA)?**
+  `leaky_bucket` — at the cost of queuing latency.
+- **Need exact counting and memory is not a concern?** `sliding_window` log
+  variant.
+- **High volume, tight memory, boundary burst unacceptable?**
+  `sliding_window` counter variant.
+- **Simplest possible, boundary burst OK?** `fixed_window`.
+
+The identifiers above (`token_bucket`, `gcra`, `sliding_window`,
+`fixed_window`, `leaky_bucket`, `adaptive`) are the canonical names used by the
+demo server and its HTTP API. Full trade-off analysis lives in
+[docs/comparison.md](docs/comparison.md) and per-algorithm deep dives in
+[docs/algorithms.md](docs/algorithms.md).
+
+---
+
+## Other resilience patterns
+
+### Retry with backoff
+
+```go
+import (
+	"time"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
+)
+
+p := &retry.Policy{
+	MaxAttempts: 5, // total calls, including the first
+	Backoff:     backoff.Exponential(100*time.Millisecond, 5*time.Second),
+	MaxDelay:    2 * time.Second,
+	RetryIf:     func(err error) bool { return errors.Is(err, ErrTransient) },
+}
+err := p.Do(ctx, func(ctx context.Context) error {
+	return callExternalService(ctx)
+})
+```
+
+Backoff strategies: `backoff.Constant`, `backoff.Exponential(base, max)`,
+`backoff.FullJitter(base, max, rng)`, `backoff.Decorrelated(base, max, rng)`.
+
+### Timeout
+
+```go
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/timeout"
+
+err := timeout.Do(ctx, 2*time.Second, func(ctx context.Context) error {
+	return slowCall(ctx)
+})
+
+// Typed variant:
+val, err := timeout.DoWithResult(ctx, 2*time.Second, func(ctx context.Context) (int, error) {
+	return fetch(ctx)
+})
+```
+
+### Fallback and hedging
+
+```go
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/fallback"
+
+// Fall back to a secondary path if the primary fails.
+err := fallback.Do(ctx,
+	func(ctx context.Context) error { return callPrimary(ctx) },
+	func(ctx context.Context, primaryErr error) error { return callSecondary(ctx) },
+)
+
+// Hedge: fire a second attempt if the first hasn't finished within the delay.
+res := fallback.Hedge(ctx, 50*time.Millisecond, func(ctx context.Context) error {
+	return callReplica(ctx)
+})
+_ = res.Err // res.Primary reports whether the primary attempt won
+```
+
+### Bulkhead
+
+```go
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
+
+bh := bulkhead.New(10, 100*time.Millisecond) // max 10 concurrent, wait up to 100ms
+err := bh.Execute(ctx, func(ctx context.Context) error {
+	return doWork(ctx)
+})
+// errors.Is(err, bulkhead.ErrBulkheadFull) when the slot wait times out
+```
+
+### HTTP middleware
 
 ```go
 import ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 
-// Rate limit by IP address
 http.Handle("/api/", ratelimitmw.RateLimit(
-    limiter,
-    ratelimitmw.WithKeyFunc(ratelimitmw.KeyByIP()),
-)(myHandler))
-
-// Rate limit by header value
-http.Handle("/api/", ratelimitmw.RateLimit(
-    limiter,
-    ratelimitmw.WithKeyFunc(ratelimitmw.KeyByHeader("X-User-ID")),
-    ratelimitmw.WithOnLimited(func(w http.ResponseWriter, r *http.Request, result ratelimit.Result) {
-        http.Error(w, "slow down!", http.StatusTooManyRequests)
-    }),
+	limiter,
+	ratelimitmw.WithKeyFunc(ratelimitmw.KeyByIP()), // or KeyByHeader("X-User-ID")
 )(myHandler))
 ```
 
-Response headers set automatically:
-- `X-RateLimit-Limit: 100`
-- `X-RateLimit-Remaining: 42`
-- `X-RateLimit-Reset: 1735689600`
-- `Retry-After: 1` (on 429)
+Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and
+`Retry-After` (on 429) automatically. gRPC interceptors are available via
+`ratelimitmw.UnaryServerInterceptor(...)` and
+`circuitbreaker/middleware.CBUnaryServerInterceptor(cb)`.
 
 ---
 
-### gRPC Interceptors
+## Demo server and frontend
 
-```go
-import (
-    ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
-    cbmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
-)
+The repository ships a demo server (Go) and a Next.js frontend that visualize
+each algorithm in real time. **These are demos, not part of the importable
+library.**
 
-srv := grpc.NewServer(
-    grpc.ChainUnaryInterceptor(
-        ratelimitmw.UnaryServerInterceptor(
-            limiter,
-            ratelimitmw.GRPCWithKeyFunc(ratelimitmw.GRPCKeyByMetadata("x-user-id")),
-        ),
-        cbmw.CBUnaryServerInterceptor(cb),
-    ),
-)
-```
-
----
-
-### Distributed Rate Limiting (Redis)
-
-```go
-import (
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
-    "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
-)
-
-s := store.NewRedis(store.RedisOptions{
-    Addr:      "redis:6379",
-    KeyPrefix: "myapp:rl:",
-})
-defer s.Close()
-
-// Drop-in replacement for the local limiter — same API
-limiter := tokenbucket.NewDistributed(100, 20, s, "api")
-result := limiter.Allow(ctx, "user:123")
-```
-
-All distributed algorithms use atomic Lua scripts — **no WATCH/MULTI/EXEC overhead**.
-
----
-
-## Running the Demo
+### Server
 
 ```bash
-# Full stack: demo server + Redis + Prometheus + Grafana
-docker-compose up
-
-# Demo server only
-go run ./server/
-
-# Run tests
-make test-race
-
-# Run benchmarks
-make bench
+# From the repo root — listens on :8080 by default.
+go run ./server
 ```
 
-- Demo server: http://localhost:8080
-- Frontend: http://localhost:3000
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3001 (admin/admin)
+Configuration via environment variables:
+
+- `PORT` — listen port (default `8080`)
+- `API_KEY` — if set, requests must present this key; if empty, the server runs
+  unauthenticated (development mode)
+- `CORS_ORIGINS` — comma-separated allowed origins (default
+  `http://localhost:3000`)
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend reads `NEXT_PUBLIC_API_URL` to reach the demo server (default
+`http://localhost:8080`). It runs on `http://localhost:3000`.
+
+### Full stack (Docker)
+
+```bash
+docker-compose up    # demo server + Redis + Prometheus + Grafana
+```
 
 ---
 
-## Contributing
+## Documentation
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution guidelines.
+- [docs/algorithms.md](docs/algorithms.md) — per-algorithm theory, formulas, and properties
+- [docs/comparison.md](docs/comparison.md) — trade-offs and a decision guide
+- [docs/distributed.md](docs/distributed.md) — Redis-backed limiters, fallback modes, cluster notes
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup and contribution guidelines
+- [SECURITY.md](SECURITY.md) — reporting security issues
+- [CHANGELOG.md](CHANGELOG.md) — release history
+
+---
+
+## API stability
+
+This project follows [Semantic Versioning](https://semver.org/). While the
+module is pre-1.0, minor releases may contain breaking API changes; pin a
+version in your `go.mod` for reproducible builds. Anything under `internal/` is
+not part of the public API and may change at any time.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+</content>
+</invoke>
