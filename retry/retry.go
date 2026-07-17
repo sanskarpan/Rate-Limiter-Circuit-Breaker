@@ -51,6 +51,65 @@ type Policy struct {
 	// Clock is the time source used for sleeping between retries.
 	// If nil, clock.RealClock{} is used.
 	Clock clock.Clock
+
+	// Budget, if non-nil, is a shared retry budget (retry-storm guard). Do
+	// records every top-level invocation against it and consumes a retry token
+	// before each extra attempt; when the budget is exhausted, retrying stops
+	// and the last error is returned. A nil Budget leaves behaviour unchanged.
+	// A single Budget may be shared across many Policy values / call sites to
+	// cap their aggregate retry rate. See Budget.
+	Budget *Budget
+}
+
+// Option configures a Policy. Options provide a functional-options constructor
+// (New) as an alternative to building a Policy struct literal directly.
+type Option func(*Policy)
+
+// New builds a Policy from the given options. It is equivalent to constructing
+// a Policy struct literal; both styles are supported.
+//
+//	p := retry.New(retry.WithMaxAttempts(3), retry.WithBudget(budget))
+func New(opts ...Option) *Policy {
+	p := &Policy{}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+// WithMaxAttempts sets Policy.MaxAttempts.
+func WithMaxAttempts(n int) Option {
+	return func(p *Policy) { p.MaxAttempts = n }
+}
+
+// WithBackoff sets Policy.Backoff.
+func WithBackoff(bo backoff.BackoffStrategy) Option {
+	return func(p *Policy) { p.Backoff = bo }
+}
+
+// WithRetryIf sets Policy.RetryIf.
+func WithRetryIf(pred func(err error) bool) Option {
+	return func(p *Policy) { p.RetryIf = pred }
+}
+
+// WithOnRetry sets Policy.OnRetry.
+func WithOnRetry(fn func(attempt int, err error, nextWait time.Duration)) Option {
+	return func(p *Policy) { p.OnRetry = fn }
+}
+
+// WithMaxDelay sets Policy.MaxDelay.
+func WithMaxDelay(d time.Duration) Option {
+	return func(p *Policy) { p.MaxDelay = d }
+}
+
+// WithClock sets Policy.Clock.
+func WithClock(clk clock.Clock) Option {
+	return func(p *Policy) { p.Clock = clk }
+}
+
+// WithBudget attaches a shared retry Budget to the Policy. See Budget.
+func WithBudget(b *Budget) Option {
+	return func(p *Policy) { p.Budget = b }
 }
 
 // clock returns the policy's clock, defaulting to RealClock.
@@ -107,11 +166,24 @@ func (p *Policy) Do(ctx context.Context, fn func(context.Context) error) error {
 	clk := p.clock()
 	max := p.maxAttempts()
 
+	// Record this top-level invocation against the shared retry budget exactly
+	// once (throughput accounting), before any attempt.
+	if p.Budget != nil {
+		p.Budget.RecordAttempt()
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < max; attempt++ {
 		// Check context before each attempt.
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		// Before every extra attempt (attempt index >= 1) consult the budget.
+		// If it denies (bucket exhausted) it consumes nothing; we stop retrying
+		// and return the last error, guarding against a retry storm.
+		if attempt > 0 && p.Budget != nil && !p.Budget.CanRetry() {
+			return lastErr
 		}
 
 		lastErr = fn(ctx)
