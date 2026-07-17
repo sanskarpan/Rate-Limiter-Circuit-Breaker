@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 )
 
 func BenchmarkCB_Execute_Closed(b *testing.B) {
