@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit/adaptive"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/adaptive"
 )
 
 func Example() {
