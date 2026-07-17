@@ -3,14 +3,17 @@ name: Release
 on:
   push:
     tags:
+      # SemVer tags only (e.g. v1.2.3, v1.2.3-rc.1).
       - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  goreleaser:
-    name: Release
+  # ─── Test gate ──────────────────────────────────────────────────────────────
+  # Run the full race suite once before building/publishing any artifacts.
+  test:
+    name: Test Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,22 +28,74 @@ jobs:
       - name: Run tests
         run: go test -race -count=1 ./...
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  # ─── Build cross-platform binaries ──────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
 
       - name: Build release binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          CGO_ENABLED=0 go build \
+          go build \
             -ldflags="-s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version=${VERSION}" \
-            -o bin/demo-server-linux-amd64 \
+            -o "bin/demo-server-${{ matrix.goos }}-${{ matrix.goarch }}" \
             ./server/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/demo-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 1
+          if-no-files-found: error
+
+  # ─── Publish GitHub Release ─────────────────────────────────────────────────
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # Each build job uploaded a single binary; flatten them all into ./bin.
+          path: bin
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             bin/demo-server-linux-amd64
+            bin/demo-server-linux-arm64
+            bin/demo-server-darwin-amd64
+            bin/demo-server-darwin-arm64
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
