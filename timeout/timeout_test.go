@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/timeout"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/timeout"
 )
 
 func TestTimeout_CompletesWithinDeadline(t *testing.T) {
