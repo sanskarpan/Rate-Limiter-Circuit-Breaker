@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/sanskarpan/resilience/retry"
-	"github.com/sanskarpan/resilience/retry/backoff"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry/backoff"
 )
 
 // ExamplePolicy_Do_constant demonstrates retrying with a constant backoff.
