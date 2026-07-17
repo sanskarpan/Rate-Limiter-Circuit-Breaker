@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sanskarpan/resilience/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
 // cbExecuteRequest is the body for POST /api/v1/cb/{name}/execute.
