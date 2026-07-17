@@ -181,7 +181,7 @@ func HedgeN(ctx context.Context, hedgeDelay time.Duration, n int, fn func(contex
 	outstanding := 0
 
 	fireAttempt := func(idx int) {
-		attemptCtx, cancel := context.WithCancel(ctx)
+		attemptCtx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 FP: cancel is stored in `cancels` and invoked on completion/cleanup
 		mu.Lock()
 		cancels = append(cancels, cancel)
 		mu.Unlock()

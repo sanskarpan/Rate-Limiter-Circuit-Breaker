@@ -10,7 +10,32 @@ linters:
     - misspell
     - staticcheck
     - unused
+    - gosec
+    - revive
+    - depguard
   settings:
+    gosec:
+      excludes:
+        - G115 # integer-overflow conversion: values are bounded state/count ids; noisy rule
+        - G404 # weak RNG: math/rand is intentional for jitter/simulation (non-cryptographic)
+        - G101 # false positive on embedded Lua script string constants
+    revive:
+      rules:
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: early-return
+        - name: unreachable-code
+        - name: superfluous-else
+        - name: defer
+        - name: unexported-return
+        - name: waitgroup-by-value
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: "io/ioutil is deprecated; use io and os"
     cyclop:
       max-complexity: 10
     funlen:

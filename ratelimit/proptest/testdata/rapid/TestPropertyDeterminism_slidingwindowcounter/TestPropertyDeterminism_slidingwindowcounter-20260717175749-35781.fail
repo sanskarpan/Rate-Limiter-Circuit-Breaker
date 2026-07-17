@@ -1,0 +1,266 @@
+# 2026/07/17 17:57:49.973871 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw nSteps: 33
+# 2026/07/17 17:57:49.973886 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.973901 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 2
+# 2026/07/17 17:57:49.973911 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.973919 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 1
+# 2026/07/17 17:57:49.973926 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 1
+# 2026/07/17 17:57:49.973930 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.973936 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 10
+# 2026/07/17 17:57:49.973941 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.973946 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 2
+# 2026/07/17 17:57:49.973955 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 1
+# 2026/07/17 17:57:49.973960 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.973965 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 0
+# 2026/07/17 17:57:49.973971 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.973976 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.973982 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 5
+# 2026/07/17 17:57:49.973988 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 4
+# 2026/07/17 17:57:49.973993 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.973999 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 1
+# 2026/07/17 17:57:49.974008 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974014 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 3
+# 2026/07/17 17:57:49.974019 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974025 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 1
+# 2026/07/17 17:57:49.974031 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 1
+# 2026/07/17 17:57:49.974037 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974042 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 1
+# 2026/07/17 17:57:49.974048 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974053 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 1
+# 2026/07/17 17:57:49.974058 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 1
+# 2026/07/17 17:57:49.974062 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974067 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 3
+# 2026/07/17 17:57:49.974072 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974076 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 5
+# 2026/07/17 17:57:49.974081 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 4
+# 2026/07/17 17:57:49.974085 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974089 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 3
+# 2026/07/17 17:57:49.974094 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974097 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974101 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 3
+# 2026/07/17 17:57:49.974106 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974110 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974114 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 1
+# 2026/07/17 17:57:49.974126 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974130 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974135 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 2
+# 2026/07/17 17:57:49.974139 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974143 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974147 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 5
+# 2026/07/17 17:57:49.974152 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974155 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974160 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 1
+# 2026/07/17 17:57:49.974165 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974169 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 2
+# 2026/07/17 17:57:49.974174 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 3
+# 2026/07/17 17:57:49.974177 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974181 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 6
+# 2026/07/17 17:57:49.974186 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974190 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 5
+# 2026/07/17 17:57:49.974194 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 3
+# 2026/07/17 17:57:49.974198 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974203 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 2
+# 2026/07/17 17:57:49.974207 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974210 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974216 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 10
+# 2026/07/17 17:57:49.974219 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974224 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 3
+# 2026/07/17 17:57:49.974228 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974233 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 5
+# 2026/07/17 17:57:49.974237 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 3
+# 2026/07/17 17:57:49.974241 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974245 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 1
+# 2026/07/17 17:57:49.974249 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974254 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 10
+# 2026/07/17 17:57:49.974259 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974265 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 1
+# 2026/07/17 17:57:49.974269 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974275 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 3
+# 2026/07/17 17:57:49.974280 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974286 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 4
+# 2026/07/17 17:57:49.974292 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 2
+# 2026/07/17 17:57:49.974296 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: false
+# 2026/07/17 17:57:49.974301 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw n: 5
+# 2026/07/17 17:57:49.974306 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw isAdvance: true
+# 2026/07/17 17:57:49.974333 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advNum: 1
+# 2026/07/17 17:57:49.974340 [TestPropertyDeterminism/slidingwindowcounter] [rapid] draw advDen: 4
+# 
+v0.4.8#11858794132216336552
+0x7a8dc4b5d04ca
+0x16d99af7affa7d
+0x20
+0x0
+0x1054d3e7ddf466
+0x3c9ca70a6bded
+0x1
+0x1
+0x137804a3cb026e
+0xc4b3acafa61b9
+0x7
+0x1
+0x118eb63572301b
+0x0
+0x0
+0xee178fffba230
+0x160c06e371d351
+0x9
+0x1
+0x15465f674395f1
+0x1717dd7c754aa1
+0x2
+0x16ff22ed27e9d3
+0x0
+0x1
+0x1c85d81bfa9498
+0xdfb1e5cc17b0
+0x0
+0xeb5f3bfb2c0a0
+0x1
+0x1
+0x57a29b56ef817
+0xab43255d58ed0
+0x5
+0x16f6f7c448bdeb
+0x3
+0x0
+0x14555f2cb8cec2
+0x32a5e7a5bf858
+0x0
+0x0
+0x19242f3ea2a26a
+0xb83ead934964b
+0x2
+0x1
+0xe1bffc2988e8f
+0x6d7f404012d9f
+0x6
+0x1
+0x1eeb33359606cc
+0x0
+0x0
+0x4b68d80b9d2d3
+0x8f992f2a1b6db
+0x0
+0x1
+0x145eb279c68cea
+0x61d106169b89
+0x1
+0x5db0463914941
+0x0
+0x0
+0x4ad7995e7bec2
+0x18fb611f2c227f
+0x2
+0x1
+0x4be2069509bb7
+0x7d46e464ed34f
+0x5
+0x1539a809656c2a
+0x3
+0x1
+0x176ee594e4b45b
+0x1dffed1d9a231b
+0x3
+0x1dafec7976bbe9
+0x1
+0x1
+0x39913d660711e
+0x9f836572cd32d
+0x3
+0x12d4c56b071d56
+0x1
+0x1
+0x1f6e1f993dd851
+0xa360947626646
+0x1
+0x148d0bd699d730
+0x1
+0x1
+0x942aeee2e936f
+0x66e3c5878b979
+0x2
+0x1fa515ba61419
+0x1
+0x1
+0x11301c76bb1b23
+0x18cfb139e54bc7
+0x7
+0x5
+0x1d48a0e1b51e8c
+0x1
+0x0
+0x9f803e0a5e1d6
+0x16b602a5d94ac9
+0x0
+0x1
+0xa5a56554e2a5e
+0x1ecec9f009e1e3
+0x7
+0x6
+0x2
+0x17878bfee3641f
+0x2
+0x0
+0x1bc1bf9d2a4764
+0xb8e635715b4e5
+0x5
+0x1
+0xca5e597fe86af
+0xa8d4d5f3d300f
+0x5
+0x472942691185f
+0x2
+0x1
+0x92e26bfd3639f
+0xac652e1528cd3
+0x2
+0xebd2f0f08cb89
+0x1
+0x0
+0x325b746d54b30
+0x1f70a3f0d1c890
+0xffffffffffffffff
+0x0
+0x3217de433c55d
+0x431323e20a892
+0x2
+0x1
+0x199071cfff6ae9
+0x1700d323ef07b7
+0x7
+0x5
+0x7417170741d15
+0x2
+0x0
+0x45e7d5995fa2c
+0x133d95686e3aa
+0x0
+0x0
+0x78847537b1b3b
+0x997e8663a2310
+0xc
+0x9
+0x0
+0x82f35cc458b2c
+0x1a74320ce5e6f7
+0x0
+0x0
+0x18e16cc029845a
+0xfcb49ef6ae353
+0x2
+0x1
+0x1ca8760092650
+0x1c2db95422391f
+0x6
+0x4
+0x1ca3bb03e9761d
+0x1
+0x0
+0x1ededcc94973b1
+0x16d6b4c2709460
+0x4
+0x1
+0x1bf781e885ced2
+0x4cb85dccf207a
+0x1
+0xe488aa069e519
+0x3

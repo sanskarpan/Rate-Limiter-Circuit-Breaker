@@ -1,0 +1,209 @@
+# 2026/07/17 17:58:28.757907 [TestPropertySlidingWindowLogAdmission] [rapid] draw limit: 16
+# 2026/07/17 17:58:28.757924 [TestPropertySlidingWindowLogAdmission] [rapid] draw windowSec: 6
+# 2026/07/17 17:58:28.757938 [TestPropertySlidingWindowLogAdmission] [rapid] draw nSteps: 24
+# 2026/07/17 17:58:28.757950 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.757956 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 0
+# 2026/07/17 17:58:28.757964 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 1
+# 2026/07/17 17:58:28.757970 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.757976 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 4
+# 2026/07/17 17:58:28.757981 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 3
+# 2026/07/17 17:58:28.758004 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758025 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 0
+# 2026/07/17 17:58:28.758034 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 3
+# 2026/07/17 17:58:28.758040 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758048 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 5
+# 2026/07/17 17:58:28.758076 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758091 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 2
+# 2026/07/17 17:58:28.758096 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758113 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 8
+# 2026/07/17 17:58:28.758123 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758154 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 18
+# 2026/07/17 17:58:28.758176 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758182 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 5
+# 2026/07/17 17:58:28.758187 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 4
+# 2026/07/17 17:58:28.758192 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758197 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 5
+# 2026/07/17 17:58:28.758202 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758207 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 3
+# 2026/07/17 17:58:28.758211 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758217 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 2
+# 2026/07/17 17:58:28.758221 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758226 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 4
+# 2026/07/17 17:58:28.758231 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 4
+# 2026/07/17 17:58:28.758235 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758240 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 3
+# 2026/07/17 17:58:28.758275 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758283 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 5
+# 2026/07/17 17:58:28.758289 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 1
+# 2026/07/17 17:58:28.758296 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758301 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 4
+# 2026/07/17 17:58:28.758306 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758311 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 1
+# 2026/07/17 17:58:28.758316 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 4
+# 2026/07/17 17:58:28.758321 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758326 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 16
+# 2026/07/17 17:58:28.758331 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758336 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 5
+# 2026/07/17 17:58:28.758341 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 4
+# 2026/07/17 17:58:28.758346 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758351 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 4
+# 2026/07/17 17:58:28.758355 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 2
+# 2026/07/17 17:58:28.758360 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758365 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 1
+# 2026/07/17 17:58:28.758369 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758374 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 4
+# 2026/07/17 17:58:28.758379 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 2
+# 2026/07/17 17:58:28.758383 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: false
+# 2026/07/17 17:58:28.758388 [TestPropertySlidingWindowLogAdmission] [rapid] draw n: 4
+# 2026/07/17 17:58:28.758393 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758397 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 1
+# 2026/07/17 17:58:28.758402 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 2
+# 2026/07/17 17:58:28.758407 [TestPropertySlidingWindowLogAdmission] [rapid] draw isAdvance: true
+# 2026/07/17 17:58:28.758411 [TestPropertySlidingWindowLogAdmission] [rapid] draw advNum: 1
+# 2026/07/17 17:58:28.758417 [TestPropertySlidingWindowLogAdmission] [rapid] draw advDen: 2
+# 
+v0.4.8#7086057885998998020
+0x3866886fb55ec
+0x1c6e17d9d5f2e3
+0x17
+0xf
+0x17c3359716bd91
+0xe1c3ca08a3ac6
+0xa
+0xe
+0x5
+0xaf34b42884c89
+0x1312da2782ed16
+0x17
+0x1
+0x1ce4e7fcbfbecc
+0x84fc286cfabfa
+0x7
+0x0
+0x1edfaa5522f596
+0x0
+0x1
+0x15c0b3cb51e06e
+0x1c6247b5fe6db5
+0x4
+0x10294fe539e8b5
+0x2
+0x1
+0x1d120db73402ab
+0xbfaaa27c1a5bd
+0x0
+0xeac148b18500a
+0x2
+0x0
+0x5423daddd83ac
+0x1cb5d41d24ff97
+0x4
+0x0
+0x19ac29ad4f6432
+0x1c6210814a3f40
+0x1e
+0x1
+0x0
+0x16b5d7499a56a
+0x1ce239723bea56
+0x18
+0x7
+0x0
+0xaf7b77c260fe9
+0x1e1beb78fc720c
+0x11
+0x1
+0x165f8e561222eb
+0x18de72fa9e5629
+0x5
+0x14f83575111d79
+0x3
+0x0
+0x30b0c843fcbef
+0x714eeb6b58df5
+0x4
+0x0
+0x13ae4f175d7dc6
+0x18d5256834b829
+0x2
+0x0
+0x1a66e3f07a89d7
+0x26ec6f3cf2108
+0x1
+0x1
+0xee51ac7daeedd
+0xb7bc1642b4a8c
+0x7
+0x7
+0x4
+0x13c87c05e1a4f2
+0x3
+0x0
+0x991468302ffd3
+0x819ca877182ee
+0x2
+0x1
+0xa41663a5c7849
+0x10a36241717786
+0x5
+0x9455c8f72e5d3
+0x0
+0x0
+0x21aeb4b8c551d
+0x1f1a0529605107
+0x3
+0x1
+0x2b2fcd7b04bba
+0x1bdc24c41127a3
+0x7
+0x7
+0x7
+0x1
+0x1631ba739046d9
+0x3
+0x0
+0x13cd49669449a0
+0x19e385cf2985e7
+0x1d
+0xf
+0x1
+0x16cbede3961420
+0x1f0f23dfe55e43
+0x5
+0x709583b6e2508
+0x3
+0x1
+0x191591f9971216
+0x1244b84188e37c
+0x4
+0xdde716d701fdd
+0x1
+0x0
+0x1b2d5be69c2be2
+0x11b7c635777710
+0x13
+0x0
+0x1
+0x184e32897371a2
+0x15a99345954527
+0x7
+0x7
+0x4
+0x1060b4cbbfa956
+0x1
+0x0
+0x1ab7fe66f4df1c
+0x1a29fc8d5d65d2
+0x3
+0x1
+0x32f03dc4db3ac
+0x1c326b466b0b47
+0x1
+0x13361f2bfbf64
+0x1
+0x1
+0x17891953bf9f2c
+0x5d1de790ea147
+0x1
+0x1a06f09fa6a8aa
+0x1

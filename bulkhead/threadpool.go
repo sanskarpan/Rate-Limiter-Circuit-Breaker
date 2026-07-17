@@ -32,6 +32,10 @@ type ThreadPool struct {
 	done    chan struct{}
 	wg      sync.WaitGroup
 	closed  atomic.Bool
+
+	// busy counts workers currently executing a task's fn (the "U" in USE
+	// for the pool). It is bumped around each fn invocation.
+	busy atomic.Int64
 }
 
 // NewThreadPool creates a new ThreadPool with the specified number of worker
@@ -70,7 +74,7 @@ func (tp *ThreadPool) run() {
 				return
 			}
 			// Execute the task and send the result back.
-			t.res <- t.fn(t.ctx)
+			t.res <- tp.exec(t)
 		case <-tp.done:
 			// Drain any remaining tasks before exiting so callers whose
 			// Submit returned a result channel still receive a value.
@@ -80,13 +84,21 @@ func (tp *ThreadPool) run() {
 					if !ok {
 						return
 					}
-					t.res <- t.fn(t.ctx)
+					t.res <- tp.exec(t)
 				default:
 					return
 				}
 			}
 		}
 	}
+}
+
+// exec runs a task's fn while accounting the worker as busy. busy is
+// decremented via defer so it stays accurate even if fn panics.
+func (tp *ThreadPool) exec(t task) error {
+	tp.busy.Add(1)
+	defer tp.busy.Add(-1)
+	return t.fn(t.ctx)
 }
 
 // Submit enqueues fn for asynchronous execution by the worker pool. It returns
@@ -131,4 +143,33 @@ func (tp *ThreadPool) Close() {
 	}
 	close(tp.done)
 	tp.wg.Wait()
+}
+
+// Pending returns the number of tasks currently buffered in the queue that have
+// been accepted but not yet picked up by a worker (queue saturation). A worker
+// executing a task no longer counts as pending; see Busy for that.
+func (tp *ThreadPool) Pending() int {
+	return len(tp.queue)
+}
+
+// QueueDepth is an alias for Pending expressed in queueing terms: the number of
+// queued-but-not-started tasks.
+func (tp *ThreadPool) QueueDepth() int {
+	return len(tp.queue)
+}
+
+// Capacity returns the configured task-queue capacity (queueSize).
+func (tp *ThreadPool) Capacity() int {
+	return cap(tp.queue)
+}
+
+// Busy returns the number of workers currently executing a task (the "U" in
+// USE for the pool). It ranges from 0 to Workers.
+func (tp *ThreadPool) Busy() int {
+	return int(tp.busy.Load())
+}
+
+// Workers returns the configured number of worker goroutines.
+func (tp *ThreadPool) Workers() int {
+	return tp.workers
 }

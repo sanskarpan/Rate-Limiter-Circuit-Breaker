@@ -630,6 +630,217 @@ end
 return {1, new_current, estimated_scaled}
 `
 
+// ---------------------------------------------------------------------------
+// Distributed circuit breaker scripts (ENHANCEMENTS §1.4)
+// ---------------------------------------------------------------------------
+//
+// Shared circuit-breaker state lives in ONE Redis hash per breaker name:
+//
+//	state               0=closed, 1=half-open, 2=open (matches circuitbreaker.State)
+//	failures            rolling failure count in the current closed window
+//	successes           consecutive successes accumulated in half-open
+//	opened_at           server-clock ns when the circuit last opened (0 if not open)
+//	half_open_inflight  probe slots currently reserved in half-open
+//
+// The whole decision + transition is done inside a single-threaded Lua script so
+// the fleet observes one consistent state machine. Two scripts are used:
+//
+//	CircuitBreakerAcquireScript  — atomically read state, lazily promote Open→HalfOpen
+//	                               once OpenTimeout has elapsed (using the server
+//	                               clock so no app-clock skew can corrupt the
+//	                               decision), and reserve a half-open probe slot.
+//	CircuitBreakerRecordScript   — atomically record one outcome, release the probe
+//	                               slot reserved by Acquire, and drive the
+//	                               state transitions (open / reopen / close).
+//
+// CLOCK: both scripts read the Redis server clock via TIME for opened_at and the
+// OpenTimeout comparison. This pins the OpenTimeout to the single Redis clock,
+// so a skewed application host cannot open the breaker "early" or "late" for the
+// fleet (the clock-skew tradeoff called out in §5.1). redis.replicate_commands()
+// is invoked first (wrapped in pcall) because TIME is non-deterministic and the
+// script must switch to effects replication on older servers.
+
+// serverNowNsLua is the shared preamble that yields `now_ns`, the Redis server
+// clock in nanoseconds. Embedded verbatim in both breaker scripts (Lua bodies
+// are opaque string constants and cannot share a Go fragment).
+//
+//	pcall(function() redis.replicate_commands() end)
+//	local t = redis.call("TIME")
+//	local now_ns = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+
+// CircuitBreakerAcquireScript atomically reads the shared breaker state and
+// decides whether the caller may proceed.
+//
+// Keys: [state_key]
+// Args: [open_timeout_ns, half_open_max, ttl_ms]
+// Returns: [decision, state]
+//
+//	decision: 0 = allow (closed, or half-open with a reserved probe slot)
+//	          1 = reject, circuit open
+//	          2 = reject, half-open probe limit reached
+//	state:    the breaker state AFTER any lazy Open→HalfOpen promotion (0/1/2)
+//
+// When decision==0 in half-open, this call has reserved a probe slot
+// (half_open_inflight was incremented) that the matching Record call releases.
+const CircuitBreakerAcquireScript = `
+local key = KEYS[1]
+local open_timeout = tonumber(ARGV[1])
+local half_open_max = tonumber(ARGV[2])
+local ttl_ms = tonumber(ARGV[3])
+pcall(function() redis.replicate_commands() end)
+local t = redis.call("TIME")
+local now_ns = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+
+local data = redis.call("HMGET", key, "state", "opened_at", "half_open_inflight")
+local state = tonumber(data[1]) or 0
+local opened_at = tonumber(data[2]) or 0
+local inflight = tonumber(data[3]) or 0
+
+if state == 2 then
+    -- Open: lazily promote to half-open once OpenTimeout has elapsed.
+    if opened_at > 0 and (now_ns - opened_at) >= open_timeout then
+        state = 1
+        inflight = 0
+        redis.call("HSET", key, "state", 1, "successes", 0, "half_open_inflight", 0)
+    else
+        return {1, 2}
+    end
+end
+
+if state == 1 then
+    -- Half-open: reserve a probe slot if one is free.
+    if inflight >= half_open_max then
+        return {2, 1}
+    end
+    redis.call("HINCRBY", key, "half_open_inflight", 1)
+    redis.call("PEXPIRE", key, ttl_ms)
+    return {0, 1}
+end
+
+-- Closed: always allow.
+return {0, 0}
+`
+
+// CircuitBreakerRecordScript atomically records one request outcome and applies
+// the resulting state transition.
+//
+// Keys: [state_key]
+// Args: [outcome, failure_threshold, success_threshold, open_timeout_ns,
+//
+//	     ttl_ms, acquired_probe]
+//	- outcome:          0 = success, 1 = failure
+//	- acquired_probe:   1 if the matching Acquire reserved a half-open slot
+//
+// Returns: [state] — the breaker state after the transition (0/1/2).
+//
+// Transition rules (mirroring the single-instance CircuitBreaker):
+//   - closed + failure: failures++; open when failures >= failure_threshold
+//   - closed + success: no-op (count-based window)
+//   - half-open + failure: reopen immediately
+//   - half-open + success: successes++; close when successes >= success_threshold
+const CircuitBreakerRecordScript = `
+local key = KEYS[1]
+local outcome = tonumber(ARGV[1])
+local failure_threshold = tonumber(ARGV[2])
+local success_threshold = tonumber(ARGV[3])
+local open_timeout = tonumber(ARGV[4])
+local ttl_ms = tonumber(ARGV[5])
+local acquired_probe = tonumber(ARGV[6]) or 0
+pcall(function() redis.replicate_commands() end)
+local t = redis.call("TIME")
+local now_ns = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+
+local data = redis.call("HMGET", key, "state", "failures", "successes", "half_open_inflight")
+local state = tonumber(data[1]) or 0
+local failures = tonumber(data[2]) or 0
+local successes = tonumber(data[3]) or 0
+local inflight = tonumber(data[4]) or 0
+
+-- Release the probe slot reserved by the matching Acquire, if any. Guard against
+-- driving the counter negative if a concurrent transition already reset it.
+if acquired_probe == 1 and inflight > 0 then
+    inflight = inflight - 1
+end
+
+local function open_circuit()
+    state = 2
+    failures = 0
+    successes = 0
+    inflight = 0
+    redis.call("HSET", key, "state", 2, "failures", 0, "successes", 0,
+        "opened_at", now_ns, "half_open_inflight", 0)
+end
+
+local function close_circuit()
+    state = 0
+    failures = 0
+    successes = 0
+    inflight = 0
+    redis.call("HSET", key, "state", 0, "failures", 0, "successes", 0,
+        "opened_at", 0, "half_open_inflight", 0)
+end
+
+if state == 1 then
+    -- Half-open probe result.
+    if outcome == 1 then
+        open_circuit()
+    else
+        successes = successes + 1
+        if successes >= success_threshold then
+            close_circuit()
+        else
+            redis.call("HSET", key, "successes", successes, "half_open_inflight", inflight)
+        end
+    end
+elseif state == 0 then
+    -- Closed window.
+    if outcome == 1 then
+        failures = failures + 1
+        if failures >= failure_threshold then
+            open_circuit()
+        else
+            redis.call("HSET", key, "failures", failures, "half_open_inflight", inflight)
+        end
+    else
+        redis.call("HSET", key, "half_open_inflight", inflight)
+    end
+else
+    -- Open: only bookkeeping (release slot). No transition on a stray outcome.
+    redis.call("HSET", key, "half_open_inflight", inflight)
+end
+
+redis.call("PEXPIRE", key, ttl_ms)
+return {state}
+`
+
+// CircuitBreakerReadScript reads the shared breaker state WITHOUT mutating it,
+// applying the lazy Open→HalfOpen promotion only to the REPORTED state so
+// State(ctx)/Snapshot(ctx) reflect what the next Acquire would decide. It never
+// writes, so a read cannot trip a transition.
+//
+// Keys: [state_key]
+// Args: [open_timeout_ns]
+// Returns: [state, failures, successes, opened_at_ns, half_open_inflight]
+const CircuitBreakerReadScript = `
+local key = KEYS[1]
+local open_timeout = tonumber(ARGV[1])
+pcall(function() redis.replicate_commands() end)
+local t = redis.call("TIME")
+local now_ns = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+
+local data = redis.call("HMGET", key, "state", "failures", "successes", "opened_at", "half_open_inflight")
+local state = tonumber(data[1]) or 0
+local failures = tonumber(data[2]) or 0
+local successes = tonumber(data[3]) or 0
+local opened_at = tonumber(data[4]) or 0
+local inflight = tonumber(data[5]) or 0
+
+if state == 2 and opened_at > 0 and (now_ns - opened_at) >= open_timeout then
+    state = 1
+end
+return {state, failures, successes, opened_at, inflight}
+`
+
 // SlidingWindowLogScript: prune + ZCARD + (conditionally) ZADD n members + EXPIRE.
 // Keys: [log_key]
 // Args: [limit, window_ns, now_ns, entry_id, ttl_ms, n, use_server_time (0/1)]
