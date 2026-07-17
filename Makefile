@@ -41,6 +41,21 @@ bench-compare: ## Compare benchmarks: make bench-compare OLD=main NEW=HEAD
 	git checkout $(NEW) && git stash pop && go test -bench=. -benchmem -count=10 ./... > /tmp/new.txt
 	benchstat /tmp/old.txt /tmp/new.txt
 
+# ─── Benchmark regression gate (mirrors .github/workflows/bench.yml) ──────────
+# Bounded set of hot-path benchmarks that the CI regression gate runs. Kept in
+# one variable so the Makefile and CI stay in sync.
+BENCH_PKGS := ./ratelimit/tokenbucket/ ./ratelimit/gcra/ ./circuitbreaker/
+BENCH_COUNT ?= 8
+BENCH_TIME ?= 200ms
+BENCH_OUT ?= /tmp/bench-ci.txt
+
+bench-ci: ## Run the bounded CI benchmark set once (hot rate limiters + circuit breaker) → $(BENCH_OUT)
+	go test -bench=. -benchmem -run='^$$' -count=$(BENCH_COUNT) -benchtime=$(BENCH_TIME) $(BENCH_PKGS) | tee $(BENCH_OUT)
+
+bench-stat: ## Compare two benchstat inputs: make bench-stat BASE=base.txt HEAD=head.txt
+	@command -v benchstat >/dev/null || go install golang.org/x/perf/cmd/benchstat@latest
+	benchstat $(BASE) $(HEAD)
+
 vuln: ## Scan for known vulnerabilities (govulncheck)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
@@ -71,7 +86,7 @@ godoc: ## Serve godoc locally
 verify-deps: ## Verify core algorithm packages have zero external runtime dependencies
 	@# Core packages (algorithms + pure logic) must have zero external deps.
 	@# Adapter packages (middleware/, store/) are allowed to import gRPC/Redis.
-	@CORE_PKGS="./ratelimit ./ratelimit/tokenbucket ./ratelimit/gcra ./ratelimit/fixedwindow ./ratelimit/slidingwindow ./ratelimit/leakybucket ./ratelimit/adaptive ./ratelimit/composite ./circuitbreaker ./bulkhead ./retry ./retry/backoff ./timeout ./fallback ./pipeline ./internal/clock ./internal/atomicx"; \
+	@CORE_PKGS="./ratelimit ./ratelimit/tokenbucket ./ratelimit/gcra ./ratelimit/fixedwindow ./ratelimit/slidingwindow ./ratelimit/leakybucket ./ratelimit/adaptive ./ratelimit/composite ./circuitbreaker ./bulkhead ./retry ./retry/backoff ./timeout ./fallback ./pipeline ./internal/clock ./internal/atomicx ./loadshed ./concurrency ./metric"; \
 	FAILED=0; \
 	for pkg in $$CORE_PKGS; do \
 		if [ -d "$$pkg" ]; then \
