@@ -5,15 +5,19 @@
 // stages into this canonical order regardless of the order the builder methods
 // were called in, so the guarantee below always holds:
 //
-//  1. Rate limiter — fail fast before consuming any resources
-//  2. Bulkhead     — control concurrency after rate check passes
-//  3. Timeout      — start the clock after acquiring a worker slot
-//  4. Circuit breaker — detect and stop cascading failures quickly
-//  5. Retry        — retry only the innermost operation, not the whole pipeline
-//  6. Custom (Use) — innermost, wraps the operation itself
+//  1. Load shedder — admission control, shed under overload before anything else
+//  2. Rate limiter — fail fast before consuming any resources
+//  3. Bulkhead     — control concurrency after rate check passes
+//  4. Timeout      — start the clock after acquiring a worker slot
+//  5. Circuit breaker — detect and stop cascading failures quickly
+//  6. Retry        — retry only the innermost operation, not the whole pipeline
+//  7. Custom (Use) — innermost, wraps the operation itself
 //
 // Why this order?
-//   - Rate limit first: don't waste a bulkhead slot on a request you'll deny anyway.
+//   - Load shed first: it is admission control. Under overload we want to shed
+//     (priority-aware) before spending any rate-limit accounting or slots on a
+//     request we may drop anyway.
+//   - Rate limit next: don't waste a bulkhead slot on a request you'll deny anyway.
 //   - Bulkhead before timeout: don't start the timeout countdown while waiting for a slot.
 //   - Timeout before CB: the CB should see real failures, not timeouts from slow queue drain.
 //   - CB before retry: don't retry if the circuit is open — that would be wasted effort.
@@ -32,6 +36,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/concurrency"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/loadshed"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
 )
@@ -40,7 +45,8 @@ import (
 type stageKind int
 
 const (
-	kindRateLimit stageKind = iota
+	kindLoadShed stageKind = iota
+	kindRateLimit
 	kindBulkhead
 	kindConcurrency
 	kindTimeout
@@ -93,6 +99,26 @@ type Builder struct {
 // New creates a new Pipeline builder.
 func New() *Builder {
 	return &Builder{}
+}
+
+// LoadShed adds a CoDel-style priority-aware load-shedding stage. It is the
+// outermost stage (admission control): under sustained overload the shedder
+// drops requests — lowest priority first — before any rate-limit accounting or
+// resource acquisition happens. On a shed it returns ErrLoadShed; otherwise the
+// downstream call's duration feeds the shedder's sojourn-time control loop.
+//
+// Attach a priority to the request context with loadshed.WithPriority so the
+// shedder can protect high-priority work while shedding low-priority work.
+func (b *Builder) LoadShed(s *loadshed.Shedder) *Builder {
+	b.stages = append(b.stages, builderStage{kindLoadShed, func(ctx context.Context, fn func(context.Context) error) error {
+		accept, done := s.Admit(ctx)
+		if !accept {
+			return ErrLoadShed
+		}
+		defer done()
+		return fn(ctx)
+	}})
+	return b
 }
 
 // RateLimit adds a rate-limiting stage.
@@ -206,8 +232,9 @@ func (b *Builder) Use(s func(ctx context.Context, fn func(context.Context) error
 }
 
 // Build constructs the Pipeline, ordering the configured stages into the fixed
-// canonical sequence (rate limit → bulkhead → timeout → circuit breaker →
-// retry → custom) regardless of the order the builder methods were called in.
+// canonical sequence (load shed → rate limit → bulkhead → timeout → circuit
+// breaker → retry → custom) regardless of the order the builder methods were
+// called in.
 // The sort is stable, so stages of the same kind keep their insertion order.
 func (b *Builder) Build() *Pipeline {
 	ordered := make([]builderStage, len(b.stages))
@@ -261,6 +288,10 @@ var ErrRateLimited = errors.New("pipeline: rate limited")
 // ErrConcurrencyLimited is returned when the adaptive concurrency stage sheds a
 // request because it is at its current in-flight limit.
 var ErrConcurrencyLimited = errors.New("pipeline: concurrency limited")
+
+// ErrLoadShed is returned when the CoDel load-shedding stage sheds a request
+// under overload (its priority was below the current dynamic drop threshold).
+var ErrLoadShed = errors.New("pipeline: load shed")
 
 // Is implements errors.Is for RateLimitError.
 func (e *RateLimitError) Is(target error) bool {
