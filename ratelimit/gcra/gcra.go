@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -58,6 +59,7 @@ type GCRA struct {
 	entries map[string]*entry
 
 	clock  clock.Clock
+	rec    metric.Recorder
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -89,6 +91,7 @@ func New(limit int, burst int, window time.Duration, opts ...Option) *GCRA {
 		emissionInterval: emissionInterval,
 		burstOffset:      burstOffset,
 		clock:            clock.RealClock{},
+		rec:              metric.Default(),
 		done:             make(chan struct{}),
 		entries:          make(map[string]*entry),
 	}
@@ -107,7 +110,10 @@ func (g *GCRA) Allow(ctx context.Context, key string) ratelimit.Result {
 
 // AllowN checks if n requests are allowed. Consumes all n or none (atomic).
 // Non-blocking. Safe for concurrent use.
-func (g *GCRA) AllowN(_ context.Context, key string, n int) ratelimit.Result {
+func (g *GCRA) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
+	start := g.clock.Now()
+	defer func() { g.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
@@ -124,6 +130,18 @@ func (g *GCRA) AllowN(_ context.Context, key string, n int) ratelimit.Result {
 	}
 	e := g.getOrCreate(key)
 	return g.consume(e, n)
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (g *GCRA) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		g.rec.IncAllowed(algorithmName)
+	} else {
+		g.rec.IncDenied(algorithmName)
+	}
+	g.rec.ObserveDecision(algorithmName, g.clock.Now().Sub(start))
 }
 
 // Wait blocks until 1 request is allowed or ctx is cancelled.

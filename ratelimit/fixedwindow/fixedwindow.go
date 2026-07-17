@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
@@ -44,6 +45,7 @@ type FixedWindowCounter struct {
 	limit     int
 	window    time.Duration
 	clock     clock.Clock
+	rec       metric.Recorder
 	idleClean time.Duration
 
 	mu       sync.RWMutex
@@ -67,6 +69,17 @@ func WithIdleCleanup(d time.Duration) Option {
 	return func(fw *FixedWindowCounter) { fw.idleClean = d }
 }
 
+// WithRecorder wires a metric.Recorder so allow/deny decisions and decision
+// latency are emitted. Defaults to metric.Default() (a no-op) when unset. A nil
+// recorder is ignored.
+func WithRecorder(rec metric.Recorder) Option {
+	return func(fw *FixedWindowCounter) {
+		if rec != nil {
+			fw.rec = rec
+		}
+	}
+}
+
 // New creates a new FixedWindowCounter allowing limit requests per window duration.
 //
 // It panics if limit or window is not positive, following the same
@@ -84,6 +97,7 @@ func New(limit int, window time.Duration, opts ...Option) *FixedWindowCounter {
 		limit:     limit,
 		window:    window,
 		clock:     clock.RealClock{},
+		rec:       metric.Default(),
 		idleClean: 5 * time.Minute,
 		counters:  make(map[string]*counter),
 		done:      make(chan struct{}),
@@ -102,7 +116,10 @@ func (fw *FixedWindowCounter) Allow(ctx context.Context, key string) ratelimit.R
 }
 
 // AllowN checks if n requests are allowed (atomically, all or none).
-func (fw *FixedWindowCounter) AllowN(_ context.Context, key string, n int) ratelimit.Result {
+func (fw *FixedWindowCounter) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
+	start := fw.clock.Now()
+	defer func() { fw.record(res, start) }()
+
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
@@ -112,6 +129,18 @@ func (fw *FixedWindowCounter) AllowN(_ context.Context, key string, n int) ratel
 
 	c := fw.getOrCreate(key)
 	return fw.consume(c, n)
+}
+
+// record fires the configured metric.Recorder for a completed decision. With
+// the default Nop recorder every call is an empty inlined method, so this stays
+// allocation-free on the hot path.
+func (fw *FixedWindowCounter) record(res ratelimit.Result, start time.Time) {
+	if res.Allowed {
+		fw.rec.IncAllowed(algorithmName)
+	} else {
+		fw.rec.IncDenied(algorithmName)
+	}
+	fw.rec.ObserveDecision(algorithmName, fw.clock.Now().Sub(start))
 }
 
 // Wait blocks until 1 request is allowed or ctx is cancelled.

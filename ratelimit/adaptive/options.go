@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
 
 // Option configures an AdaptiveLimiter.
@@ -13,6 +14,17 @@ type Option func(*AdaptiveLimiter)
 func WithClock(c clock.Clock) Option {
 	return func(al *AdaptiveLimiter) {
 		al.clock = c
+	}
+}
+
+// WithRecorder wires a metric.Recorder so allow/deny decisions and decision
+// latency are emitted under the "adaptive" algorithm. Defaults to
+// metric.Default() (a no-op) when unset. A nil recorder is ignored.
+func WithRecorder(rec metric.Recorder) Option {
+	return func(al *AdaptiveLimiter) {
+		if rec != nil {
+			al.rec = rec
+		}
 	}
 }
 
