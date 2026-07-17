@@ -2,12 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-02-23
+## [Unreleased]
+
+Nothing yet. Add user-facing changes here as they land.
+
+## [0.1.0] - unreleased
+
+No git tag has been cut yet; the entries below describe the current state of
+`main` and will be dated when `0.1.0` is released.
 
 ### Added
+
 - Token Bucket rate limiter with lazy refill and burst support
 - Leaky Bucket rate limiter with queue-based constant output rate
 - Fixed Window Counter rate limiter
@@ -38,16 +46,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security headers middleware
 
 ### Fixed
-- Deadlock in `Close()` across all 5 rate limiter packages: `close(done)` was called
-  while holding `mu.Lock()`, causing cleanup goroutines to starve under CPU contention.
-  Fixed by releasing mutex before signalling shutdown channel.
-- `go vet` context leak in `fallback.Hedge()`: restructured to use `defer backupCancel()`
-  after the hedge timer fires, ensuring cancel is always called.
+
+- Deadlock in `Close()` across all 5 rate limiter packages: `close(done)` was
+  called while holding `mu.Lock()`, causing cleanup goroutines to starve under
+  CPU contention. Fixed by releasing the mutex before signalling the shutdown
+  channel.
+- `go vet` context leak in `fallback.Hedge()`: restructured to use
+  `defer backupCancel()` after the hedge timer fires, ensuring cancel is always
+  called.
 
 ### Performance
+
 - Token Bucket: 62 ns/op, 0 allocs
 - GCRA: 67 ns/op, 0 allocs
 - Fixed Window: 73 ns/op, 0 allocs
 - Sliding Window Counter: 71 ns/op, 0 allocs
 - Circuit Breaker (closed): 82 ns/op, 0 allocs
 - All core packages: zero external runtime dependencies
+
+[Unreleased]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/main...HEAD
+[0.1.0]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/tree/main

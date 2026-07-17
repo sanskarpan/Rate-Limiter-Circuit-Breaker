@@ -1,0 +1,99 @@
+name: Bug report
+description: Report a defect in the Go library, adapters, demo server, or frontend.
+title: "bug: <short summary>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please do **not** report security
+        vulnerabilities here — see [SECURITY.md](../blob/main/SECURITY.md).
+        Search existing issues first to avoid duplicates.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior, including any error messages, panics, or stack traces.
+      placeholder: |
+        Calling limiter.Allow() panics with ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal, runnable snippet or sequence of steps. Minimal reproducers get fixed fastest.
+      placeholder: |
+        1. Construct a tokenbucket.Limiter with rate=..., burst=...
+        2. Call ... concurrently from N goroutines
+        3. Observe ...
+      render: go
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package / area
+      description: Which part of the project is affected?
+      options:
+        - ratelimit (tokenbucket / gcra / fixedwindow / slidingwindow / leakybucket)
+        - ratelimit/adaptive
+        - ratelimit/composite
+        - ratelimit/store (Redis / distributed)
+        - circuitbreaker
+        - bulkhead
+        - retry / backoff
+        - timeout
+        - fallback / hedge
+        - pipeline
+        - middleware / gRPC interceptors
+        - server (demo backend)
+        - frontend (Next.js)
+        - other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Project version / commit
+      description: Tag, or output of `git rev-parse --short HEAD`.
+      placeholder: "e.g. v0.1.0 or 4e4594f"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`. (Not required for frontend-only issues.)
+      placeholder: "go version go1.24.0 darwin/arm64"
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS / environment
+      placeholder: "macOS 15 arm64, Linux amd64, Docker, ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Logs, benchmark output, or anything else that helps.
+    validations:
+      required: false
