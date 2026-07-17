@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/fallback"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/fallback"
 )
 
 var errPrimary = errors.New("primary error")
