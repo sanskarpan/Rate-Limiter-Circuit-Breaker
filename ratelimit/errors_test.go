@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
 func TestErrors_Is_DirectMatch(t *testing.T) {
