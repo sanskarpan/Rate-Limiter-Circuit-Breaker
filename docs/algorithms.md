@@ -1,6 +1,12 @@
 # Algorithm Deep-Dives
 
-## Token Bucket
+> Part of the [Resilience](../README.md) documentation.
+> See also: [Algorithm comparison](comparison.md) · [Distributed rate limiting](distributed.md)
+
+Each algorithm is identified in the demo server and HTTP API by a canonical
+underscore name, shown in parentheses below.
+
+## Token Bucket (`token_bucket`)
 
 **Theory:** A bucket holds up to `capacity` tokens. Tokens refill at `refillRate` per second (lazy — computed on demand). Each request consumes 1+ tokens. If the bucket is empty, the request is denied.
 
@@ -19,7 +25,7 @@ tokens(t) = min(capacity, tokens(t₀) + (t - t₀) * refillRate)
 
 ---
 
-## Leaky Bucket
+## Leaky Bucket (`leaky_bucket`)
 
 **Theory:** Requests enter a FIFO queue ("bucket") of size `capacity`. A background goroutine drains ("leaks") requests at exactly `leakRate` req/s.
 
@@ -39,7 +45,7 @@ input_rate = any (up to capacity; excess dropped)
 
 ---
 
-## Sliding Window Log
+## Sliding Window — Log variant (`sliding_window`)
 
 **Theory:** Maintain a sorted list of request timestamps for each key. On each request:
 1. Remove timestamps older than `now - window`
@@ -58,7 +64,7 @@ retryAfter = oldest_timestamp_in_window + window - now
 
 ---
 
-## Sliding Window Counter
+## Sliding Window — Counter variant (`sliding_window`)
 
 **Theory:** Two counters: `current` (this window) + `previous` (last window). Compute effective rate with weighted formula:
 
@@ -75,7 +81,7 @@ effectiveCount = previous.count × (1 - elapsed/window) + current.count
 
 ---
 
-## Fixed Window Counter
+## Fixed Window Counter (`fixed_window`)
 
 **Theory:** Divide time into fixed windows. Count requests in the current window. Reset at window boundary.
 
@@ -94,7 +100,7 @@ Window N ends, Window N+1 starts
 
 ---
 
-## GCRA (Generic Cell Rate Algorithm)
+## GCRA — Generic Cell Rate Algorithm (`gcra`)
 
 **Theory:** One timestamp (Theoretical Arrival Time, TAT) per key encodes the full state.
 
@@ -118,3 +124,26 @@ remaining        = floor((now + burstOffset - TAT) / emissionInterval)
 - ATM Forum Traffic Management specification
 - Brandur Leach: "Rate Limiting with Redis"
 - RFC 2697 (Single Rate Three Color Marker)
+
+---
+
+## Adaptive (`adaptive`)
+
+**Theory:** Not a standalone counting algorithm — the adaptive limiter tracks a
+*limit* that it retunes at runtime from live signals (observed latency and
+error rate) between a configured `minLimit` and `maxLimit`. When downstream
+health degrades it shrinks the limit (load shedding); when health recovers it
+grows it back.
+
+**Properties:**
+- Dynamic limit within `[minLimit, maxLimit]`
+- O(keys) memory
+- Local only — there is no distributed variant, since the tuning decision is
+  based on each instance's own observed signals
+
+**When to use:** Protecting a downstream whose safe throughput varies with its
+own load — the limiter backs off automatically instead of using a fixed ceiling.
+
+---
+
+See also: [Algorithm comparison](comparison.md) · [Distributed rate limiting](distributed.md) · [README](../README.md)
