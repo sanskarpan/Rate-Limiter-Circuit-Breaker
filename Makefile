@@ -91,3 +91,6 @@ docker-run: ## Start full stack with Docker Compose
 
 clean: ## Remove build artifacts
 	rm -rf bin/ coverage.out bench-*.txt
+
+test-contrib: ## Build+test the contrib framework-middleware module
+	cd contrib && go build ./... && go vet ./... && go test -race ./...

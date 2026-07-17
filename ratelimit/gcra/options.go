@@ -5,10 +5,24 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
 // Option configures a GCRA limiter.
 type Option func(*GCRA)
+
+// WithOnDecision registers a hook fired after every Allow/AllowN decision
+// (both allow and deny), receiving the key and the resulting Result. The
+// default is nil (a cheap no-op guarded by a nil check on the hot path). The
+// hook runs synchronously on the calling goroutine before the decision is
+// returned, so keep it fast and non-blocking. A nil hook is ignored.
+func WithOnDecision(fn func(key string, r ratelimit.Result)) Option {
+	return func(g *GCRA) {
+		if fn != nil {
+			g.onDecision = fn
+		}
+	}
+}
 
 // WithClock sets a custom clock (used for testing).
 func WithClock(c clock.Clock) Option {

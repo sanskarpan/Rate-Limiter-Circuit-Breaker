@@ -65,6 +65,24 @@ type RedisOptions struct {
 
 	// KeyPrefix is prepended to all keys (default: "rl:").
 	KeyPrefix string
+
+	// UseServerTime, when true, makes the time-sensitive distributed limiters
+	// (token bucket, GCRA, sliding-window-log) use the Redis server's own clock
+	// (via the in-script TIME command) as the authoritative time source instead
+	// of the client-supplied `now`. This mitigates clock skew across an
+	// application fleet: with skewed app clocks, client-time mode can corrupt a
+	// distributed decision, whereas server-time mode pins every instance to the
+	// single Redis clock.
+	//
+	// Default false (client time) for backward compatibility. Enabling it adds a
+	// tiny per-call cost (an extra in-script TIME read) and forces effects
+	// replication for those scripts. Note that FixedWindow and
+	// SlidingWindowCounter derive their window boundaries in the Go caller, so
+	// they are unaffected by this flag.
+	//
+	// This flag is read by ServerTimeMode(); distributed limiters wired against
+	// this store can call that to decide whether to send use_server_time=1.
+	UseServerTime bool
 }
 
 func (o *RedisOptions) defaults() {
@@ -348,19 +366,119 @@ func (r *Redis) Client() *goredis.Client {
 	return r.client
 }
 
+// ServerTimeMode reports whether this store was configured (via
+// RedisOptions.UseServerTime) to use the Redis server clock as the authoritative
+// time source for the time-sensitive distributed scripts. Distributed limiters
+// query this to decide whether to send use_server_time=1.
+//
+// The in-memory (*Memory) store also exposes a ServerTimeMode() method (always
+// false unless set via NewMemoryWithScripts option), so callers can type-assert
+// a store.Store to the interface { ServerTimeMode() bool } uniformly.
+func (r *Redis) ServerTimeMode() bool {
+	return r.opts.UseServerTime
+}
+
+// ServerTimeSkew reads the Redis server clock (via the TIME command) and returns
+// the measured skew relative to the local clock, defined as (serverTime -
+// localTime). A positive value means the Redis server is ahead of this host; a
+// negative value means it is behind.
+//
+// The measurement includes ~half the round-trip latency as noise: local now is
+// sampled immediately before the call and the server timestamp is compared
+// against it, so the returned skew is accurate to roughly the RTT/2. For skew
+// detection (flagging clocks that are seconds or minutes apart) that resolution
+// is more than sufficient.
+//
+// This is the recommended way to decide whether server-time mode is worth
+// enabling for a deployment, and to alert when an app host's clock has drifted.
+func (r *Redis) ServerTimeSkew(ctx context.Context) (time.Duration, error) {
+	before := time.Now()
+	tv, err := r.client.Time(ctx).Result()
+	if err != nil {
+		return 0, fmt.Errorf("redis time: %w", err)
+	}
+	// Midpoint of the local interval spanning the round trip best estimates the
+	// instant the server sampled its clock.
+	mid := before.Add(time.Since(before) / 2)
+	return tv.Sub(mid), nil
+}
+
+// ServerTimeSkewThreshold is the default absolute skew above which
+// CheckServerTimeSkew reports the clocks as significantly diverged.
+const ServerTimeSkewThreshold = 250 * time.Millisecond
+
+// CheckServerTimeSkew measures the skew (see ServerTimeSkew) and returns the
+// skew plus a boolean that is true when |skew| exceeds threshold. If threshold
+// is <= 0, ServerTimeSkewThreshold is used. Callers can wire this into a metric
+// gauge or emit a warning log when the boolean is set — the library core stays
+// dependency-free and does not log on its own.
+func (r *Redis) CheckServerTimeSkew(ctx context.Context, threshold time.Duration) (skew time.Duration, exceeded bool, err error) {
+	if threshold <= 0 {
+		threshold = ServerTimeSkewThreshold
+	}
+	skew, err = r.ServerTimeSkew(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	abs := skew
+	if abs < 0 {
+		abs = -abs
+	}
+	return skew, abs > threshold, nil
+}
+
 // ---------------------------------------------------------------------------
 // Lua scripts for distributed rate limiting
 // ---------------------------------------------------------------------------
 
+// Server-time mode (Redis clock-skew mitigation, ENHANCEMENTS §5.1)
+// ------------------------------------------------------------------
+// Every time-sensitive Lua script (TokenBucket, GCRA, SlidingWindowLog) accepts
+// a trailing `use_server_time` ARGV (default "0"). When it is "1", the script
+// overrides the client-supplied `now` (nanoseconds) with a nanosecond timestamp
+// derived from Redis's own `TIME` command, making the authoritative clock the
+// Redis server rather than the (potentially skewed) calling application. Each of
+// those scripts embeds this preamble verbatim (Lua bodies are opaque string
+// constants, so they cannot share a Go-level fragment):
+//
+//	pcall(function() redis.replicate_commands() end)
+//	if tostring(use_server_time) == "1" then
+//	    local t = redis.call("TIME")
+//	    now = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+//	end
+//
+// redis.replicate_commands() is called first: TIME is non-deterministic, so a
+// script that reads it must switch the connection to *effects* replication
+// (replicating the concrete writes) instead of *verbatim* script replication,
+// otherwise a replica/AOF re-run would observe a different clock and diverge. On
+// Redis >= 5 scripts are effects-replicated by default and the function is a
+// no-op returning true; on older servers it performs the switch. It is wrapped
+// in pcall so that on the oldest servers (where it may already be forced and
+// error) the script still proceeds.
+//
+// TRADEOFF: server-time mode makes the decision immune to app-fleet clock skew,
+// but each call issues an extra in-script `TIME` read and forces effects
+// replication (marginally larger replication stream). The default (client time)
+// remains unchanged and fully backward compatible.
+//
+// FixedWindowScript and SlidingWindowCounterScript do NOT take use_server_time:
+// they receive only pre-derived window keys / limit / n and never read `now`
+// inside the script, so the authoritative clock for those two lives entirely in
+// the Go caller (which is a separate, larger change — see distributed callers).
+
 // TokenBucketScript atomically reads tokens + lastRefill, computes refill, checks, and decrements.
 // Keys: [bucket_key]
-// Args: [capacity, refillRate (tokens/ns), n (tokens to consume), now (unix ns), ttl_ms]
+// Args: [capacity, refillRate (tokens/ns), n (tokens to consume), now (unix ns), ttl_ms, use_server_time (0/1)]
 // Returns: [allowed (1/0), remaining, refilled]
 //
 // ttl_ms is the key expiry supplied by the Go caller (time to refill a full
 // bucket plus a safety margin). Previously the Go side computed ttlMs and then
 // discarded it, and the script derived its own PEXPIRE from capacity/refill_rate
 // with no margin (L-1/TB-2); now the caller's ttl_ms is authoritative.
+//
+// use_server_time (ARGV[6], default "0"): when "1", `now` is overridden with the
+// Redis server clock via TIME (see serverTimePreamble) so app clock skew across a
+// fleet cannot corrupt the distributed decision.
 const TokenBucketScript = `
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])
@@ -368,6 +486,12 @@ local refill_rate = tonumber(ARGV[2])
 local n = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
 local ttl_ms = tonumber(ARGV[5])
+local use_server_time = ARGV[6] or "0"
+pcall(function() redis.replicate_commands() end)
+if tostring(use_server_time) == "1" then
+    local t = redis.call("TIME")
+    now = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+end
 if ttl_ms == nil or ttl_ms < 1 then
     ttl_ms = math.ceil(capacity / refill_rate / 1000000)
 end
@@ -426,8 +550,11 @@ return {1, new_count}
 
 // GCRAScript atomically reads TAT, computes new TAT, checks, and stores.
 // Keys: [tat_key]
-// Args: [emission_interval_ns, burst_size, n, now_ns, ttl_ms]
+// Args: [emission_interval_ns, burst_size, n, now_ns, ttl_ms, use_server_time (0/1)]
 // Returns: [allowed (1/0), retry_after_ns]
+//
+// use_server_time (ARGV[6], default "0"): when "1", `now` is overridden with the
+// Redis server clock via TIME (see the server-time preamble docs above).
 const GCRAScript = `
 local key = KEYS[1]
 local emission_interval = tonumber(ARGV[1])
@@ -435,6 +562,12 @@ local burst = tonumber(ARGV[2])
 local n = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
 local ttl_ms = tonumber(ARGV[5])
+local use_server_time = ARGV[6] or "0"
+pcall(function() redis.replicate_commands() end)
+if tostring(use_server_time) == "1" then
+    local t = redis.call("TIME")
+    now = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+end
 
 local stored_tat = tonumber(redis.call("GET", key)) or now
 local tat = math.max(stored_tat, now) + emission_interval * n
@@ -499,8 +632,13 @@ return {1, new_current, estimated_scaled}
 
 // SlidingWindowLogScript: prune + ZCARD + (conditionally) ZADD n members + EXPIRE.
 // Keys: [log_key]
-// Args: [limit, window_ns, now_ns, entry_id, ttl_ms, n]
+// Args: [limit, window_ns, now_ns, entry_id, ttl_ms, n, use_server_time (0/1)]
 // Returns: [allowed (1/0), count, retry_after_ns]
+//
+// use_server_time (ARGV[7], default "0"): when "1", `now_ns` is overridden with
+// the Redis server clock via TIME (see the server-time preamble docs above). The
+// ZSET member scores are then written with the server clock, keeping pruning and
+// admission consistent across a skewed fleet.
 //
 // Matches the local SlidingWindowLog semantics: an AllowN(n) either admits all n
 // or none, denies when count+n > limit (not count >= limit, which ignored n and
@@ -517,6 +655,12 @@ local now_ns = tonumber(ARGV[3])
 local entry_id = ARGV[4]
 local ttl_ms = tonumber(ARGV[5])
 local n = tonumber(ARGV[6]) or 1
+local use_server_time = ARGV[7] or "0"
+pcall(function() redis.replicate_commands() end)
+if tostring(use_server_time) == "1" then
+    local t = redis.call("TIME")
+    now_ns = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+end
 
 local cutoff = now_ns - window_ns
 redis.call("ZREMRANGEBYSCORE", key, "-inf", cutoff)

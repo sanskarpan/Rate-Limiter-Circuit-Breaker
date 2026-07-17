@@ -69,6 +69,10 @@ type CompositeLimiter struct {
 	// composite_or. The underlying limiters keep their own recorders (default
 	// Nop) so wiring is opt-in per layer.
 	rec metric.Recorder
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // New creates a CompositeLimiter combining the given limiters.
@@ -101,6 +105,19 @@ func (c *CompositeLimiter) WithRecorder(rec metric.Recorder) *CompositeLimiter {
 	return c
 }
 
+// WithOnDecision registers a hook fired after every Allow/AllowN decision (both
+// allow and deny), receiving the key and the composite's final Result. The
+// default is nil (a cheap no-op guarded by a nil check on the hot path).
+// Returns the limiter for chaining. The hook runs synchronously on the calling
+// goroutine before the decision is returned, so keep it fast and non-blocking.
+// A nil hook is ignored. Not safe to call concurrently with AllowN.
+func (c *CompositeLimiter) WithOnDecision(fn func(key string, r ratelimit.Result)) *CompositeLimiter {
+	if fn != nil {
+		c.onDecision = fn
+	}
+	return c
+}
+
 // record fires the configured metric.Recorder for a completed decision. With
 // the default Nop recorder every call is an empty inlined method, so this stays
 // allocation-free on the hot path.
@@ -113,6 +130,15 @@ func (c *CompositeLimiter) record(res ratelimit.Result, start time.Time) {
 	c.rec.ObserveDecision(c.algorithm(), c.clock.Now().Sub(start))
 }
 
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free.
+func setCost(res *ratelimit.Result, cost int) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
+}
+
 // Allow checks if 1 request is allowed. Non-blocking.
 func (c *CompositeLimiter) Allow(ctx context.Context, key string) ratelimit.Result {
 	return c.AllowN(ctx, key, 1)
@@ -123,7 +149,15 @@ func (c *CompositeLimiter) Allow(ctx context.Context, key string) ratelimit.Resu
 // OR mode: first allow wins.
 func (c *CompositeLimiter) AllowN(ctx context.Context, key string, n int) (res ratelimit.Result) {
 	start := c.clock.Now()
-	defer func() { c.record(res, start) }()
+	defer func() {
+		if n != 1 {
+			setCost(&res, n)
+		}
+		c.record(res, start)
+		if c.onDecision != nil {
+			c.onDecision(key, res)
+		}
+	}()
 
 	if len(c.limiters) == 0 {
 		return ratelimit.Result{

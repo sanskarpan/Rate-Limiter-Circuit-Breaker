@@ -50,10 +50,27 @@ type SlidingWindowLog struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // LogOption configures a SlidingWindowLog.
 type LogOption func(*SlidingWindowLog)
+
+// WithLogOnDecision registers a hook fired after every Allow/AllowN decision
+// (both allow and deny), receiving the key and the resulting Result. The
+// default is nil (a cheap no-op guarded by a nil check on the hot path). The
+// hook runs synchronously on the calling goroutine before the decision is
+// returned, so keep it fast and non-blocking. A nil hook is ignored.
+func WithLogOnDecision(fn func(key string, r ratelimit.Result)) LogOption {
+	return func(l *SlidingWindowLog) {
+		if fn != nil {
+			l.onDecision = fn
+		}
+	}
+}
 
 // WithLogClock sets the clock for testing.
 func WithLogClock(c clock.Clock) LogOption {
@@ -109,7 +126,15 @@ func (l *SlidingWindowLog) Allow(ctx context.Context, key string) ratelimit.Resu
 // AllowN checks if n requests are allowed in the current window.
 func (l *SlidingWindowLog) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
 	start := l.clock.Now()
-	defer func() { l.record(res, start) }()
+	defer func() {
+		if n != 1 {
+			setCost(&res, n)
+		}
+		l.record(res, start)
+		if l.onDecision != nil {
+			l.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: logAlgorithmName}

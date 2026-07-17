@@ -70,6 +70,10 @@ type LeakyBucket struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // New creates a new LeakyBucket with the given queue capacity and leak rate (requests/second).
@@ -114,12 +118,27 @@ func (lb *LeakyBucket) record(res ratelimit.Result, start time.Time) {
 	lb.rec.ObserveDecision(algorithmName, lb.clock.Now().Sub(start))
 }
 
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free.
+func setCost(res *ratelimit.Result, cost int) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
+}
+
 // Allow attempts to queue a request for key. Non-blocking.
 // If the queue is full, returns Allowed=false immediately.
 func (lb *LeakyBucket) Allow(ctx context.Context, key string) (res ratelimit.Result) {
 	start := lb.clock.Now()
-	defer func() { lb.record(res, start) }()
-	return lb.allow1(ctx, key)
+	defer func() {
+		lb.record(res, start)
+		if lb.onDecision != nil {
+			lb.onDecision(key, res)
+		}
+	}()
+	res = lb.allow1(ctx, key)
+	return res
 }
 
 // allow1 is the unrecorded single-request path, shared by Allow and the n==1
@@ -172,7 +191,15 @@ func (lb *LeakyBucket) allow1(ctx context.Context, key string) ratelimit.Result 
 // entire batch is denied immediately without enqueuing any token.
 func (lb *LeakyBucket) AllowN(ctx context.Context, key string, n int) (res ratelimit.Result) {
 	start := lb.clock.Now()
-	defer func() { lb.record(res, start) }()
+	defer func() {
+		if n != 1 {
+			setCost(&res, n)
+		}
+		lb.record(res, start)
+		if lb.onDecision != nil {
+			lb.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}

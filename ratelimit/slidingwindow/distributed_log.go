@@ -22,19 +22,55 @@ type DistributedSlidingWindowLog struct {
 	// seq gives every AllowN call a process-unique member prefix so two calls
 	// in the same nanosecond cannot generate colliding ZSET members (H-2/SWL-D2).
 	seq atomic.Uint64
+
+	// useServerTime, when true, tells the Lua script to override the client
+	// clock with Redis's own TIME (clock-skew mitigation, ENHANCEMENTS §5.1).
+	useServerTime bool
 }
 
+// DistributedLogOption configures a distributed sliding-window-log limiter.
+type DistributedLogOption func(*DistributedSlidingWindowLog)
+
+// WithServerTime forces server-time mode on (true) or off (false), overriding
+// whatever the underlying store reports via ServerTimeMode(). In server-time
+// mode the Lua script uses Redis's TIME command as the authoritative clock so
+// application clock skew across a fleet cannot corrupt the decision.
+func WithServerTime(on bool) DistributedLogOption {
+	return func(d *DistributedSlidingWindowLog) { d.useServerTime = on }
+}
+
+// serverTimeCapable is satisfied by stores that expose whether server-time mode
+// is enabled (both *store.Redis and *store.Memory do).
+type serverTimeCapable interface{ ServerTimeMode() bool }
+
 // NewDistributedLog creates a Redis-backed sliding window log.
-func NewDistributedLog(limit int, window time.Duration, s store.Store, prefix string) *DistributedSlidingWindowLog {
+//
+// By default it inherits server-time mode from the store; pass
+// WithServerTime(true|false) to override.
+func NewDistributedLog(limit int, window time.Duration, s store.Store, prefix string, opts ...DistributedLogOption) *DistributedSlidingWindowLog {
 	if prefix == "" {
 		prefix = "rl"
 	}
-	return &DistributedSlidingWindowLog{
+	d := &DistributedSlidingWindowLog{
 		limit:  limit,
 		window: window,
 		prefix: prefix,
 		store:  s,
 	}
+	if stc, ok := s.(serverTimeCapable); ok {
+		d.useServerTime = stc.ServerTimeMode()
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
+}
+
+func (d *DistributedSlidingWindowLog) serverTimeArg() int {
+	if d.useServerTime {
+		return 1
+	}
+	return 0
 }
 
 func (d *DistributedSlidingWindowLog) redisKey(key string) string {
@@ -68,7 +104,7 @@ func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n 
 
 	result, err := d.store.Eval(ctx, store.SlidingWindowLogScript,
 		[]string{d.redisKey(key)},
-		d.limit, int64(d.window), nowNs, entryID, ttlMs, n,
+		d.limit, int64(d.window), nowNs, entryID, ttlMs, n, d.serverTimeArg(),
 	)
 	if err != nil {
 		return ratelimit.Result{

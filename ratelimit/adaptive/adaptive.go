@@ -78,6 +78,10 @@ type AdaptiveLimiter struct {
 	// retained for backward-compatible configuration.
 	p99Warn     time.Duration
 	p99Critical time.Duration
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single nil check.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // New creates an AdaptiveLimiter.
@@ -140,6 +144,9 @@ func (al *AdaptiveLimiter) AllowN(ctx context.Context, key string, n int) rateli
 	result.Algorithm = algorithmName
 	result.Limit = int(al.currentLimit.Load())
 	al.record(result, start)
+	if al.onDecision != nil {
+		al.onDecision(key, result)
+	}
 	return result
 }
 

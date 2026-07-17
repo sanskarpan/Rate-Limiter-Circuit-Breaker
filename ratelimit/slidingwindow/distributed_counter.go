@@ -15,6 +15,13 @@ import (
 //	estimated = current_window_count + prev_window_count * (1 - elapsed/window)
 //
 // Key naming: {prefix}:swcnt:{key}:{window_start_unix}
+//
+// Server-time note (ENHANCEMENTS §5.1): this limiter derives its window
+// boundaries and the elapsed fraction in the Go caller (from time.Now), not
+// inside the Lua script, so it does NOT participate in Redis server-time mode.
+// The authoritative clock for the counter is the calling host's clock. Use the
+// sliding-window LOG variant (NewDistributedLog + WithServerTime) if you need a
+// server-clock-authoritative sliding window across a skewed fleet.
 type DistributedSlidingWindowCounter struct {
 	limit  int
 	window time.Duration

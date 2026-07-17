@@ -12,6 +12,11 @@ import (
 // DistributedFixedWindow is a Redis-backed fixed window counter.
 // Uses atomic INCR + EXPIRE for O(1) performance.
 // Key naming: {prefix}:fixedwindow:{key}:{window_start_unix}
+//
+// Server-time note (ENHANCEMENTS §5.1): the window boundary is derived in the Go
+// caller (from time.Now) and encoded into the key, and the Lua script never
+// reads a clock, so this limiter does NOT participate in Redis server-time mode.
+// The authoritative clock is the calling host's clock.
 type DistributedFixedWindow struct {
 	limit  int
 	window time.Duration

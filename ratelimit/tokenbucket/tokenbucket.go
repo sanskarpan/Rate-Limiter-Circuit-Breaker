@@ -57,6 +57,11 @@ type TokenBucket struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
+
+	// onDecision, when non-nil, is fired synchronously after every Allow/AllowN
+	// decision. nil by default so the hot path stays a single branch-predicted
+	// nil check. See WithOnDecision.
+	onDecision func(key string, r ratelimit.Result)
 }
 
 // New creates a new TokenBucket with the given capacity and refill rate (tokens/second).
@@ -101,7 +106,12 @@ func (tb *TokenBucket) Allow(ctx context.Context, key string) ratelimit.Result {
 // Non-blocking. Safe for concurrent use.
 func (tb *TokenBucket) AllowN(_ context.Context, key string, n int) (res ratelimit.Result) {
 	start := tb.clock.Now()
-	defer func() { tb.record(res, start) }()
+	defer func() {
+		tb.record(res, start)
+		if tb.onDecision != nil {
+			tb.onDecision(key, res)
+		}
+	}()
 
 	if err := ratelimit.ValidateKey(key); err != nil {
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
@@ -110,7 +120,50 @@ func (tb *TokenBucket) AllowN(_ context.Context, key string, n int) (res ratelim
 		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
 	}
 	b := tb.getOrCreate(key)
-	return tb.consume(b, float64(n))
+	res = tb.consume(b, float64(n))
+	if n != 1 {
+		setCost(&res, n)
+	}
+	return res
+}
+
+// AllowCost is the fractional-cost variant of AllowN: it consumes cost tokens
+// all-or-nothing, where cost may be non-integer (the token bucket stores
+// fractional tokens internally). Integer AllowN remains the default; use this
+// only when a weighted, non-integer cost model is required.
+//
+// A cost <= 0 is rejected as an invalid request (Allowed=false) to match the
+// n >= 1 contract of AllowN.
+func (tb *TokenBucket) AllowCost(_ context.Context, key string, cost float64) (res ratelimit.Result) {
+	start := tb.clock.Now()
+	defer func() {
+		tb.record(res, start)
+		if tb.onDecision != nil {
+			tb.onDecision(key, res)
+		}
+	}()
+
+	if err := ratelimit.ValidateKey(key); err != nil {
+		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
+	}
+	if cost <= 0 {
+		return ratelimit.Result{Allowed: false, Algorithm: algorithmName}
+	}
+	b := tb.getOrCreate(key)
+	res = tb.consume(b, cost)
+	setCost(&res, cost)
+	return res
+}
+
+// setCost records the consumed cost in res.Metadata under the "cost" key,
+// allocating the map lazily so the n==1 hot path stays allocation-free. The
+// integer AllowN path stores an int; the fractional AllowCost path stores a
+// float64.
+func setCost(res *ratelimit.Result, cost any) {
+	if res.Metadata == nil {
+		res.Metadata = ratelimit.Metadata{}
+	}
+	res.Metadata["cost"] = cost
 }
 
 // record fires the configured metric.Recorder for a completed decision. With
