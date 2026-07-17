@@ -1,31 +1,45 @@
+version: "2"
 run:
-  timeout: 5m
-  go: "1.23"
-
+  go: "1.24"
 linters:
-  disable-all: true
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  settings:
+    cyclop:
+      max-complexity: 10
+    funlen:
+      lines: 80
+      statements: 50
+    gocognit:
+      min-complexity: 15
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - funlen
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples/
+formatters:
   enable:
     - gofmt
-    - govet
-    - errcheck
-    - staticcheck
-    - gosimple
-    - ineffassign
-    - unused
-    - misspell
-
-linters-settings:
-  cyclop:
-    max-complexity: 10
-  funlen:
-    lines: 80
-    statements: 50
-  gocognit:
-    min-complexity: 15
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - funlen
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples/
