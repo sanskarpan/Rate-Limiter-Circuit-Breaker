@@ -17,20 +17,56 @@ type DistributedGCRA struct {
 	burst            int
 	prefix           string
 	store            store.Store
+
+	// useServerTime, when true, tells the Lua script to override the client
+	// clock with Redis's own TIME (clock-skew mitigation, ENHANCEMENTS §5.1).
+	useServerTime bool
 }
+
+// DistributedOption configures a distributed GCRA limiter.
+type DistributedOption func(*DistributedGCRA)
+
+// WithServerTime forces server-time mode on (true) or off (false), overriding
+// whatever the underlying store reports via ServerTimeMode(). In server-time
+// mode the Lua script uses Redis's TIME command as the authoritative clock so
+// application clock skew across a fleet cannot corrupt the decision.
+func WithServerTime(on bool) DistributedOption {
+	return func(d *DistributedGCRA) { d.useServerTime = on }
+}
+
+// serverTimeCapable is satisfied by stores that expose whether server-time mode
+// is enabled (both *store.Redis and *store.Memory do).
+type serverTimeCapable interface{ ServerTimeMode() bool }
 
 // NewDistributed creates a Redis-backed GCRA limiter.
 // rate is requests per second, burst is the allowed burst size.
-func NewDistributed(rate float64, burst int, s store.Store, prefix string) *DistributedGCRA {
+//
+// By default it inherits server-time mode from the store; pass
+// WithServerTime(true|false) to override.
+func NewDistributed(rate float64, burst int, s store.Store, prefix string, opts ...DistributedOption) *DistributedGCRA {
 	if prefix == "" {
 		prefix = "rl"
 	}
-	return &DistributedGCRA{
+	d := &DistributedGCRA{
 		emissionInterval: time.Duration(float64(time.Second) / rate),
 		burst:            burst,
 		prefix:           prefix,
 		store:            s,
 	}
+	if stc, ok := s.(serverTimeCapable); ok {
+		d.useServerTime = stc.ServerTimeMode()
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
+}
+
+func (d *DistributedGCRA) serverTimeArg() int {
+	if d.useServerTime {
+		return 1
+	}
+	return 0
 }
 
 func (d *DistributedGCRA) redisKey(key string) string {
@@ -65,7 +101,7 @@ func (d *DistributedGCRA) AllowN(ctx context.Context, key string, n int) ratelim
 
 	result, err := d.store.Eval(ctx, store.GCRAScript,
 		[]string{d.redisKey(key)},
-		int64(d.emissionInterval), d.burst, n, nowNs, ttlMs,
+		int64(d.emissionInterval), d.burst, n, nowNs, ttlMs, d.serverTimeArg(),
 	)
 	if err != nil {
 		return ratelimit.Result{
