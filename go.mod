@@ -1,4 +1,4 @@
-module github.com/sanskarpan/resilience
+module github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
 
 go 1.24.0
 
