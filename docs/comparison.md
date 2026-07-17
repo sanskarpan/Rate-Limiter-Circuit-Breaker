@@ -1,5 +1,12 @@
 # Algorithm Comparison
 
+> Part of the [Resilience](../README.md) documentation.
+> See also: [Algorithm deep-dives](algorithms.md) · [Distributed rate limiting](distributed.md)
+
+Canonical identifiers used by the demo server and HTTP API: `token_bucket`,
+`leaky_bucket`, `sliding_window` (log and counter variants),
+`fixed_window`, `gcra`, `adaptive`.
+
 ## Quick Comparison Table
 
 | Algorithm | Burst | Exact | Memory | Distributed | Latency Added | Use When |
@@ -11,19 +18,21 @@
 | Fixed Window | ❌ | ✅ | O(keys) | ✅ | None | Simplest, boundary burst ok |
 | GCRA | ✅ | ✅ | O(keys) | ✅ | None | High-performance API |
 
-## Performance Benchmarks
+## Performance
 
-All benchmarks run on Apple M2, Go 1.24, `-count=5 -benchmem`:
+All in-memory limiters operate in the tens of nanoseconds per `Allow` call and
+allocate nothing on the hot path. Relative cost ordering (cheapest first):
 
-| Algorithm | ns/op | allocs/op | MB/op |
-|-----------|-------|-----------|-------|
-| Token Bucket (single key) | 62 | 0 | 0 |
-| GCRA | 67 | 0 | 0 |
-| Fixed Window | 45 | 0 | 0 |
-| Sliding Counter | 52 | 0 | 0 |
-| Sliding Log | 110 | 1 | ~0 |
-| Leaky Bucket | 95 | 1 | ~0 |
-| Circuit Breaker | 82 | 0 | 0 |
+1. **Fixed Window / Sliding Counter** — a couple of counter updates.
+2. **Token Bucket / GCRA** — O(1) arithmetic per key, zero allocations.
+3. **Sliding Window Log** — grows with the number of timestamps in the window.
+4. **Leaky Bucket** — channel-backed queue per key.
+
+Run the suite yourself to get numbers for your hardware and Go version:
+
+```bash
+make bench
+```
 
 ## Decision Guide
 
@@ -60,11 +69,21 @@ exactly `window` duration ending at `now`.
 
 ## Distributed Considerations
 
-| Algorithm | Redis Commands | Atomic? | Notes |
-|-----------|---------------|---------|-------|
-| Token Bucket | 1 Lua script | ✅ | EVALSHA for efficiency |
-| GCRA | 1 GET + 1 SET | ✅ via CAS | Or 1 Lua for true atomicity |
-| Fixed Window | INCR + EXPIRE | ✅ | INCR is atomic; EXPIRE race possible |
-| Sliding Log | ZADD + ZCOUNT + ZREMRANGEBYSCORE | ✅ via MULTI | Redis sorted set |
-| Sliding Counter | 2 INCR on separate keys | ✅ | Two-key window |
-| Leaky Bucket | Requires distributed queue | ❌ | Hard to distribute correctly |
+Every distributed variant executes a single atomic Lua script on one key, so it
+is safe under concurrency and compatible with Redis Cluster.
+
+| Algorithm | Distributed variant | Atomic? | Notes |
+|-----------|--------------------|:-------:|-------|
+| Token Bucket | `tokenbucket.NewDistributed` | ✅ | Lua read-refill-consume in one round-trip |
+| GCRA | `gcra.NewDistributed` | ✅ | Single-timestamp update; most Redis-efficient |
+| Fixed Window | `fixedwindow.NewDistributed` | ✅ | INCR + PEXPIRE inside one script |
+| Sliding Log | `slidingwindow.NewDistributedLog` | ✅ | Sorted-set trim + count in one script |
+| Sliding Counter | `slidingwindow.NewDistributedCounter` | ✅ | Two-window weighted count |
+| Leaky Bucket | — | — | No distributed variant (ordered queue is hard to distribute) |
+
+See [Distributed rate limiting](distributed.md) for constructor signatures,
+fallback modes, and key naming.
+
+---
+
+See also: [Algorithm deep-dives](algorithms.md) · [Distributed rate limiting](distributed.md) · [README](../README.md)
