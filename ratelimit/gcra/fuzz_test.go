@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
-	"github.com/sanskarpan/resilience/ratelimit/gcra"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
 )
 
 func FuzzGCRA(f *testing.F) {
