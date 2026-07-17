@@ -110,4 +110,3 @@ func isCBFailure(err error) bool {
 		return false
 	}
 }
-

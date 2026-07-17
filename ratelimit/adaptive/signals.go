@@ -38,10 +38,6 @@ type ewma struct {
 	count  int
 }
 
-func newEWMA(alpha float64) *ewma {
-	return newEWMAWithPrior(alpha, 0.0, 10)
-}
-
 // newEWMAWithPrior creates an EWMA seeded at `prior` with a `warmup`-sample ramp.
 func newEWMAWithPrior(alpha, prior float64, warmup int) *ewma {
 	if warmup < 0 {

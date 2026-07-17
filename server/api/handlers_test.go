@@ -58,7 +58,6 @@ func testHandlers(t *testing.T) *Handlers {
 	return NewHandlers(limiters, cbs, registry, hub, testLogger(), &ready)
 }
 
-
 // ── HandleAllow tests ────────────────────────────────────────────────────────
 
 func TestHandleAllow_Allowed(t *testing.T) {

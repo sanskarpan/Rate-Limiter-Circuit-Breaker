@@ -329,4 +329,3 @@ func shortestRetry(results []ratelimit.Result, algo string) ratelimit.Result {
 	shortest.Algorithm = algo
 	return shortest
 }
-

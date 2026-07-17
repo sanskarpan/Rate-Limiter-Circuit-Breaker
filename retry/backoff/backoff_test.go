@@ -34,10 +34,10 @@ func TestExponentialBackoff_Formula(t *testing.T) {
 	b := backoff.Exponential(base, max)
 
 	expected := []time.Duration{
-		100 * time.Millisecond, // 2^0 * 100ms
-		200 * time.Millisecond, // 2^1 * 100ms
-		400 * time.Millisecond, // 2^2 * 100ms
-		800 * time.Millisecond, // 2^3 * 100ms
+		100 * time.Millisecond,  // 2^0 * 100ms
+		200 * time.Millisecond,  // 2^1 * 100ms
+		400 * time.Millisecond,  // 2^2 * 100ms
+		800 * time.Millisecond,  // 2^3 * 100ms
 		1600 * time.Millisecond, // 2^4 * 100ms
 		3200 * time.Millisecond, // 2^5 * 100ms
 		6400 * time.Millisecond, // 2^6 * 100ms

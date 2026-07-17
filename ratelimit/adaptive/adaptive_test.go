@@ -408,7 +408,10 @@ func TestRuntimeSignals_EMAWarmup(t *testing.T) {
 // construction, instead of deferring an uncatchable SetLimit(0,0) panic to the
 // background adjustLoop goroutine when a stressed limiter falls to 0.
 func TestAdaptive_New_RejectsInvalidBounds(t *testing.T) {
-	cases := []struct{ name string; init, min, max int }{
+	cases := []struct {
+		name           string
+		init, min, max int
+	}{
 		{"zero min", 5, 0, 10},
 		{"negative min", 5, -1, 10},
 		{"max below min", 5, 5, 3},
