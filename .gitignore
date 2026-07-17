@@ -1,0 +1,14 @@
+bin/
+coverage.out
+bench-*.txt
+*.test
+*.out
+.air.toml
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+vendor/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
