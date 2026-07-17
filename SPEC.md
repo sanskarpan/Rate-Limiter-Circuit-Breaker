@@ -9,7 +9,7 @@
 Build a **production-grade, publishable Go library** implementing every major rate limiting algorithm and resilience pattern from scratch — along with a **Next.js visual playground** that lets you interact with, benchmark, and understand every algorithm in real time.
 
 This is two things simultaneously:
-1. **A real Go library** (`github.com/sanskarpan/resilience`) — importable, well-documented, benchmark-tested, usable in production HTTP servers, gRPC services, and any Go application
+1. **A real Go library** (`github.com/sanskarpan/Rate-Limiter-Circuit-Breaker`) — importable, well-documented, benchmark-tested, usable in production HTTP servers, gRPC services, and any Go application
 2. **An educational + operational dashboard** — built in Next.js — that visualizes algorithm internals, simulates load, and exposes real-time behavior
 
 **Stack:**
@@ -1207,7 +1207,7 @@ The library must be production-publishable:
 - **README.md** with: quick start code snippet, algorithm comparison table, when-to-use guide, performance benchmarks, API reference
 - **CHANGELOG.md** with semantic versioning
 - Version: `v1.0.0` — this is a stable release, no breaking changes after tagging
-- Module path: `github.com/sanskarpan/resilience`
+- Module path: `github.com/sanskarpan/Rate-Limiter-Circuit-Breaker`
 
 ### Zero External Runtime Dependencies (core library)
 
@@ -1218,7 +1218,7 @@ The library must be production-publishable:
 - `math` for calculations
 - `log/slog` for optional structured logging
 
-The Redis adapter (`store/redis.go`) is a separate import path `github.com/sanskarpan/resilience/store/redis` with `go-redis/v9` as its only dependency — keeping the core library zero-dependency.
+The Redis adapter (`store/redis.go`) is a separate import path `github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/store/redis` with `go-redis/v9` as its only dependency — keeping the core library zero-dependency.
 
 ### Thread Safety Guarantees
 
@@ -1525,7 +1525,7 @@ jobs:
         run: |
           # Core packages must have no external deps
           for pkg in ratelimit circuitbreaker bulkhead retry timeout fallback pipeline; do
-            DEPS=$(go list -f '{{.Imports}}' ./$pkg/... | grep -v "^(sync|time|context|math|errors|fmt|log|io|os|runtime|strings|strconv|sort|unicode|bytes|encoding|reflect|atomic)" | grep -v "^github.com/sanskarpan/resilience" || true)
+            DEPS=$(go list -f '{{.Imports}}' ./$pkg/... | grep -v "^(sync|time|context|math|errors|fmt|log|io|os|runtime|strings|strconv|sort|unicode|bytes|encoding|reflect|atomic)" | grep -v "^github.com/sanskarpan/Rate-Limiter-Circuit-Breaker" || true)
             if [ -n "$DEPS" ]; then
               echo "Core package $pkg has external deps: $DEPS"
               exit 1
@@ -1555,7 +1555,7 @@ jobs:
         with:
           generate_release_notes: true
       - name: Publish to pkg.go.dev
-        run: GOPROXY=proxy.golang.org go list -m github.com/sanskarpan/resilience@${{ github.ref_name }}
+        run: GOPROXY=proxy.golang.org go list -m github.com/sanskarpan/Rate-Limiter-Circuit-Breaker@${{ github.ref_name }}
 ```
 
 ---
@@ -1789,4 +1789,4 @@ The project is **done** when every single item below is checked. No partial cred
 - [ ] `docker-compose up` then SIGTERM → `docker-compose down` — clean shutdown, no "zombie" containers
 - [ ] GitHub Actions CI passes on clean branch (test, race, fuzz, lint, verify-deps, build)
 - [ ] Release workflow: `git tag v1.0.0 && git push --tags` triggers Docker push + GitHub Release
-- [ ] `go list -m github.com/sanskarpan/resilience@v1.0.0` resolves on proxy.golang.org
+- [ ] `go list -m github.com/sanskarpan/Rate-Limiter-Circuit-Breaker@v1.0.0` resolves on proxy.golang.org

@@ -16,7 +16,7 @@ Application → Distributed Limiter → Redis Store → Redis
 ## Redis Store
 
 ```go
-import "github.com/sanskarpan/resilience/ratelimit/store"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 
 redisStore, err := store.NewRedis(store.RedisConfig{
     Addr:     "localhost:6379",
@@ -42,7 +42,7 @@ redisStore, err := store.NewRedis(store.RedisConfig{
 ## Distributed Token Bucket
 
 ```go
-import "github.com/sanskarpan/resilience/ratelimit/tokenbucket"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 
 // Global limit: 100 req/s shared across all instances
 limiter := tokenbucket.NewDistributed(
@@ -63,7 +63,7 @@ The Redis key is `myapp:rl:tokenbucket:{key}`. The Lua script atomically:
 ## Distributed GCRA
 
 ```go
-import "github.com/sanskarpan/resilience/ratelimit/gcra"
+import "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/gcra"
 
 limiter := gcra.NewDistributed(
     redisStore,

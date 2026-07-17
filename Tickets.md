@@ -24,7 +24,7 @@
 
 **Files to create:**
 ```
-go.mod                          # module github.com/sanskarpan/resilience, go 1.23
+go.mod                          # module github.com/sanskarpan/Rate-Limiter-Circuit-Breaker, go 1.23
 go.sum                          # empty initially
 .gitignore
 .golangci.yml                   # linter config (see spec)
@@ -34,7 +34,7 @@ README.md                       # skeleton — full content added in Phase 7
 ```
 
 **go.mod must have:**
-- Module path: `github.com/sanskarpan/resilience`
+- Module path: `github.com/sanskarpan/Rate-Limiter-Circuit-Breaker`
 - Go version: `1.23`
 - Zero `require` entries in the core module (zero deps rule)
 
@@ -325,7 +325,7 @@ tools.go                        # blank import of tools for go:generate
 **Complete Makefile:**
 ```makefile
 GOBIN := $(shell go env GOPATH)/bin
-MODULE := github.com/sanskarpan/resilience
+MODULE := github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags="-s -w -X $(MODULE)/server/version.Version=$(VERSION)"
 

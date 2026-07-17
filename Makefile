@@ -1,5 +1,5 @@
 GOBIN := $(shell go env GOPATH)/bin
-MODULE := github.com/sanskarpan/resilience
+MODULE := github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags="-s -w -X $(MODULE)/server/version.Version=$(VERSION)"
 
