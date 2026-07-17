@@ -17,20 +17,56 @@ type DistributedTokenBucket struct {
 	refillRate float64 // tokens per nanosecond
 	prefix     string
 	store      store.Store
+
+	// useServerTime, when true, tells the Lua script to override the client
+	// clock with Redis's own TIME (clock-skew mitigation, ENHANCEMENTS §5.1).
+	useServerTime bool
 }
+
+// DistributedOption configures a distributed token bucket.
+type DistributedOption func(*DistributedTokenBucket)
+
+// WithServerTime forces server-time mode on (true) or off (false), overriding
+// whatever the underlying store reports via ServerTimeMode(). In server-time
+// mode the Lua script uses Redis's TIME command as the authoritative clock so
+// application clock skew across a fleet cannot corrupt the decision.
+func WithServerTime(on bool) DistributedOption {
+	return func(d *DistributedTokenBucket) { d.useServerTime = on }
+}
+
+// serverTimeCapable is satisfied by stores that expose whether server-time mode
+// is enabled (both *store.Redis and *store.Memory do).
+type serverTimeCapable interface{ ServerTimeMode() bool }
 
 // NewDistributed creates a Redis-backed token bucket.
 // rate is tokens per second, capacity is the maximum burst size.
-func NewDistributed(rate, capacity float64, s store.Store, prefix string) *DistributedTokenBucket {
+//
+// By default it inherits server-time mode from the store (store.RedisOptions.
+// UseServerTime); pass WithServerTime(true|false) to override.
+func NewDistributed(rate, capacity float64, s store.Store, prefix string, opts ...DistributedOption) *DistributedTokenBucket {
 	if prefix == "" {
 		prefix = "rl"
 	}
-	return &DistributedTokenBucket{
+	d := &DistributedTokenBucket{
 		capacity:   capacity,
 		refillRate: rate / float64(time.Second),
 		prefix:     prefix,
 		store:      s,
 	}
+	if stc, ok := s.(serverTimeCapable); ok {
+		d.useServerTime = stc.ServerTimeMode()
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
+}
+
+func (d *DistributedTokenBucket) serverTimeArg() int {
+	if d.useServerTime {
+		return 1
+	}
+	return 0
 }
 
 func (d *DistributedTokenBucket) redisKey(key string) string {
@@ -62,7 +98,7 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 
 	result, err := d.store.Eval(ctx, store.TokenBucketScript,
 		[]string{d.redisKey(key)},
-		d.capacity, d.refillRate, n, nowNs, ttlMs,
+		d.capacity, d.refillRate, n, nowNs, ttlMs, d.serverTimeArg(),
 	)
 	if err != nil {
 		// On error, deny to be safe

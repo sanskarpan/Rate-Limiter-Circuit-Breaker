@@ -93,6 +93,29 @@ func toString(v any) string {
 	}
 }
 
+// serverTimeFlag returns true when the arg at idx (if present) coerces to "1",
+// matching the Lua `tostring(use_server_time) == "1"` check. Absent/short arg
+// lists default to false (client-time mode, backward compatible).
+func serverTimeFlag(args []any, idx int) bool {
+	if idx < 0 || idx >= len(args) {
+		return false
+	}
+	return toString(args[idx]) == "1"
+}
+
+// memoryServerNowNs mirrors the Redis in-script TIME override for the in-memory
+// emulation: when server-time mode is requested AND enabled on this store, the
+// store's own local clock is the authoritative "server" clock, so the emulation
+// substitutes time.Now() for the client-supplied `now`. It intentionally snaps
+// to microsecond resolution to match Redis TIME (seconds + microseconds), then
+// scales back to nanoseconds, so the emulation and the real script agree.
+func (m *Memory) memoryServerNowNs(useServerTime bool) (int64, bool) {
+	if !useServerTime || !m.useServerTime {
+		return 0, false
+	}
+	return time.Now().UnixMicro() * 1000, true
+}
+
 // ---------------------------------------------------------------------------
 // Token bucket emulation (mirrors TokenBucketScript)
 // ---------------------------------------------------------------------------
@@ -122,6 +145,12 @@ func (m *Memory) tokenBucketHandler(keys []string, args []any) (any, error) {
 	now, err := toFloat(args[3])
 	if err != nil {
 		return nil, err
+	}
+	// Server-time mode: use the store's own clock as the authoritative "server"
+	// clock, ignoring the (possibly skewed) client-supplied now. Mirrors the Lua
+	// TIME override guarded by use_server_time (ARGV[6], idx 5).
+	if srv, ok := m.memoryServerNowNs(serverTimeFlag(args, 5)); ok {
+		now = float64(srv)
 	}
 	// Mirror Redis: with refillRate <= 0 the Lua PEXPIRE argument becomes
 	// capacity/0 = inf, which errors and fails the whole Eval (deny). Fail
@@ -229,6 +258,11 @@ func (m *Memory) gcraHandler(keys []string, args []any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Server-time mode: substitute the store's own clock for the client `now`
+	// (mirrors the Lua TIME override guarded by use_server_time, ARGV[6], idx 5).
+	if srv, ok := m.memoryServerNowNs(serverTimeFlag(args, 5)); ok {
+		now = srv
+	}
 
 	key := keys[0]
 	e, err := m.loadOrCreateRaw(key)
@@ -305,6 +339,11 @@ func (m *Memory) slidingWindowLogHandler(keys []string, args []any) (any, error)
 		if v, e := toInt64(args[5]); e == nil {
 			n = v
 		}
+	}
+	// Server-time mode: substitute the store's own clock for the client now_ns
+	// (mirrors the Lua TIME override guarded by use_server_time, ARGV[7], idx 6).
+	if srv, ok := m.memoryServerNowNs(serverTimeFlag(args, 6)); ok {
+		nowNs = srv
 	}
 
 	key := keys[0]
