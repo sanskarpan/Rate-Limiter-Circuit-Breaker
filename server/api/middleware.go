@@ -120,11 +120,30 @@ func Metrics(m *metrics.Metrics) func(http.Handler) http.Handler {
 			if route == "" {
 				route = "other"
 			}
+			// Bound BOTH labels to a fixed set. r.Method is attacker-controlled
+			// and this middleware runs before routing/auth, so an unbounded
+			// method label would let unauthenticated clients create arbitrary
+			// time series (cardinality/memory DoS, F-1). Bucket non-standard
+			// methods under "other".
+			method := normalizeMethod(r.Method)
 			m.HTTPRequestsTotal.WithLabelValues(
-				r.Method, route, strconv.Itoa(rr.statusCode)).Inc()
+				method, route, strconv.Itoa(rr.statusCode)).Inc()
 			m.HTTPDurationSecs.WithLabelValues(
-				r.Method, route).Observe(time.Since(start).Seconds())
+				method, route).Observe(time.Since(start).Seconds())
 		})
+	}
+}
+
+// normalizeMethod bounds the HTTP method label to the standard set so an
+// attacker cannot inflate metric cardinality with arbitrary method tokens (F-1).
+func normalizeMethod(m string) string {
+	switch m {
+	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete,
+		http.MethodPatch, http.MethodHead, http.MethodOptions, http.MethodConnect,
+		http.MethodTrace:
+		return m
+	default:
+		return "other"
 	}
 }
 

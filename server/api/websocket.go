@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -125,16 +124,15 @@ func (ws *WSHandler) upgrade(w http.ResponseWriter, r *http.Request, filter stri
 		filter: filter,
 	}
 
-	ws.hub.register <- client
-
-	// Send a welcome message using the standard envelope.
-	welcome, _ := json.Marshal(Event{
-		Type: "connected",
-		Name: filter,
-		Data: map[string]string{"filter": filter},
-		TS:   time.Now().UnixMilli(),
-	})
-	client.send <- welcome
+	// Register with the hub. Guard against a hub that is shutting down so this
+	// never blocks forever, and never send on client.send from here — the hub
+	// owns that channel's lifecycle and sends the welcome itself (F-3).
+	select {
+	case ws.hub.register <- client:
+	case <-ws.hub.done:
+		conn.Close()
+		return
+	}
 
 	// Start write pump in a goroutine; read pump in current goroutine
 	go client.writePump()

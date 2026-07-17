@@ -135,6 +135,17 @@ func TestHub_BroadcastEventEnvelope(t *testing.T) {
 	hub.register <- c
 	time.Sleep(10 * time.Millisecond)
 
+	// The hub sends a "connected" welcome on register (F-3); drain it first.
+	select {
+	case msg := <-c.send:
+		var ev Event
+		if err := json.Unmarshal(msg, &ev); err != nil || ev.Type != "connected" {
+			t.Fatalf("expected connected welcome first, got %s (err=%v)", msg, err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected connected welcome on register")
+	}
+
 	// Matching name is delivered.
 	hub.BroadcastEvent("cb_state_change", "primary", map[string]string{"state": "open"})
 	select {

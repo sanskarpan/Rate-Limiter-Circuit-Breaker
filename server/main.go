@@ -81,7 +81,7 @@ func main() {
 	var ready atomic.Bool
 
 	// ── HTTP server ──────────────────────────────────────────────────────────
-	handler := api.NewRouter(limiters, cbs, registry, logger, &ready, cfg.CORSOrigins, cfg.APIKey)
+	handler, hub := api.NewRouterWithHub(limiters, cbs, registry, logger, &ready, cfg.CORSOrigins, cfg.APIKey)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
@@ -127,6 +127,10 @@ func main() {
 		logger.Error("shutdown error", "error", err)
 		os.Exit(1)
 	}
+
+	// Stop the WebSocket hub so its Run goroutine exits and every client's
+	// writePump is unblocked (closes each c.send) rather than leaking (H-17/F-2).
+	hub.Stop()
 
 	// Close all rate limiters
 	for name, l := range limiters {
