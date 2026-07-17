@@ -99,7 +99,9 @@ jobs:
         id: image
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/sanskarpan/rate-limiter-circuit-breaker:${GITHUB_REF_NAME}"
+          # goreleaser's {{ .Version }} strips the leading "v", so the pushed
+          # tag is e.g. 0.1.0 while GITHUB_REF_NAME is v0.1.0 — strip it to match.
+          IMAGE="ghcr.io/sanskarpan/rate-limiter-circuit-breaker:${GITHUB_REF_NAME#v}"
           DIGEST="$(docker buildx imagetools inspect "${IMAGE}" \
             --format '{{ json .Manifest.Digest }}' | tr -d '"')"
           echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
