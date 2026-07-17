@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanskarpan/resilience/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 )
 
 // TestL10_NewTimeWindow_ZeroBucketWidth_NoPanic calls newTimeWindow directly with
