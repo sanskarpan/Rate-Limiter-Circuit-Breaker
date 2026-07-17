@@ -1,6 +1,6 @@
 # Production Readiness Audit Report
 
-**Project**: `github.com/sanskarpan/resilience`
+**Project**: `github.com/sanskarpan/Rate-Limiter-Circuit-Breaker`
 **Date**: 2026-02-23
 **Auditor**: Claude Code (claude-sonnet-4-6)
 **Version**: 1.0.0
