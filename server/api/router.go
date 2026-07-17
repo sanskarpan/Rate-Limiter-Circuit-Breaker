@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sanskarpan/resilience/circuitbreaker"
-	"github.com/sanskarpan/resilience/ratelimit"
-	"github.com/sanskarpan/resilience/server/metrics"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/metrics"
 )
 
 // serverMetrics is registered once on the default Prometheus registry. Using a
