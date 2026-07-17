@@ -184,10 +184,7 @@ func isConnectionError(err error) bool {
 	// Any other network operation error (non-timeout dial/read/write failure),
 	// including ECONNREFUSED wrapped in a *net.OpError without a Timeout() method.
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-	return false
+	return errors.As(err, &opErr)
 }
 
 // Get returns the value for key, or ErrNotFound if absent or expired.
@@ -219,9 +216,14 @@ func (r *Redis) Set(ctx context.Context, key, value string, ttl time.Duration) e
 
 // SetNX stores value only if key does not exist. Returns true if the key was set.
 func (r *Redis) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	ok, err := r.client.SetNX(ctx, r.prefixed(key), value, ttl).Result()
+	// SET key value NX PX ttl — the modern replacement for the deprecated SETNX.
+	// Returns goredis.Nil when NX fails because the key already exists.
+	err := r.client.SetArgs(ctx, r.prefixed(key), value, goredis.SetArgs{Mode: "NX", TTL: ttl}).Err()
 	if err == nil {
-		return ok, nil
+		return true, nil
+	}
+	if errors.Is(err, goredis.Nil) {
+		return false, nil
 	}
 	if isConnectionError(err) {
 		return r.fallback.SetNX(ctx, key, value, ttl)
@@ -401,9 +403,10 @@ end
 // Keys: [window_key]
 // Args: [limit, n, ttl_ms]
 // Returns: [allowed (1/0), count]
-//   On deny, count is the unchanged current count. On allow, count is the new
-//   post-increment count. TTL is applied only when the INCRBY creates the key so
-//   the window boundary is fixed from its start.
+//
+//	On deny, count is the unchanged current count. On allow, count is the new
+//	post-increment count. TTL is applied only when the INCRBY creates the key so
+//	the window boundary is fixed from its start.
 const FixedWindowScript = `
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -459,8 +462,10 @@ end
 //     current window already elapsed, scaled to an integer to avoid passing a
 //     float through ARGV.
 //   - current_ttl_ms is applied to the current-window key only on creation.
+//
 // Returns: [allowed (1/0), new_current_count, estimated_scaled]
-//   estimated_scaled = floor(estimated * 1e6) so Go can recover the float.
+//
+//	estimated_scaled = floor(estimated * 1e6) so Go can recover the float.
 //
 // The estimate uses a plain float comparison (estimated + n <= limit) to match
 // the local SlidingWindowCounter, rather than math.Ceil which denied earlier and

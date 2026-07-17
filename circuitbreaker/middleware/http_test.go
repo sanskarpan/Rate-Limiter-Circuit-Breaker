@@ -21,19 +21,6 @@ func newCB(name string) *circuitbreaker.CircuitBreaker {
 	})
 }
 
-// tripCB sends enough failing requests through the middleware to open the circuit.
-func tripCB(t *testing.T, handler http.Handler, n int) {
-	t.Helper()
-	failingBackend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	for i := 0; i < n; i++ {
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-		_ = failingBackend // silence linter
-	}
-}
-
 // --- Tests ---
 
 func TestCircuitBreaker_ClosedPassesThrough(t *testing.T) {

@@ -569,7 +569,7 @@ func TestCB_NoGoroutineLeak(t *testing.T) {
 	ctx := context.Background()
 
 	// Exercise it
-	cb.Execute(ctx, func(_ context.Context) error { return nil })   //nolint:errcheck
+	cb.Execute(ctx, func(_ context.Context) error { return nil })     //nolint:errcheck
 	cb.Execute(ctx, func(_ context.Context) error { return errTest }) //nolint:errcheck
 	cb.Snapshot()
 
@@ -583,14 +583,14 @@ func TestCB_NoGoroutineLeak(t *testing.T) {
 func TestCB_SuccessThreshold_RequiresConsecutiveSuccesses(t *testing.T) {
 	clk := newClock()
 	cfg := circuitbreaker.Config{
-		Name:             "thresh-test",
-		WindowType:       circuitbreaker.CountBased,
-		WindowSize:       5,
-		FailureThreshold: 3,
-		OpenTimeout:      50 * time.Millisecond,
+		Name:                "thresh-test",
+		WindowType:          circuitbreaker.CountBased,
+		WindowSize:          5,
+		FailureThreshold:    3,
+		OpenTimeout:         50 * time.Millisecond,
 		SuccessThreshold:    2,
 		HalfOpenMaxRequests: 3,
-		Clock:            clk,
+		Clock:               clk,
 	}
 	cb := circuitbreaker.New(cfg)
 	ctx := context.Background()

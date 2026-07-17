@@ -32,7 +32,7 @@ type CircuitBreaker struct {
 	openedAt atomic.Int64 // unix nanoseconds when circuit opened, 0 if not open
 
 	// HalfOpen probe tracking
-	halfOpenInflight atomic.Int64
+	halfOpenInflight     atomic.Int64
 	consecutiveSuccesses atomic.Int64
 
 	// Metrics window (only one is used based on WindowType)
@@ -225,11 +225,8 @@ func (cb *CircuitBreaker) afterExecute(err error, duration time.Duration, ctx co
 	state := cb.State()
 
 	// Check if this is a timeout caused by our RequestTimeout, not caller cancellation
-	isCBTimeout := false
-	if cb.cfg.RequestTimeout > 0 && ctx.Err() == context.DeadlineExceeded && err != nil {
-		// This is a CB-imposed timeout
-		isCBTimeout = true
-	}
+	// This is a CB-imposed timeout (not caller cancellation).
+	isCBTimeout := cb.cfg.RequestTimeout > 0 && ctx.Err() == context.DeadlineExceeded && err != nil
 
 	// Determine if this counts as a failure
 	// Context cancellation from caller does NOT count (unless it's CB's own timeout)

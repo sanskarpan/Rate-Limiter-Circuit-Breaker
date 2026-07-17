@@ -19,6 +19,7 @@ import (
 //     rules; and it will fail across differing NaN payloads that are
 //     "equal" in the float sense.
 //   - Add/Sub on a NaN value propagate NaN as usual.
+//
 // Callers must not rely on CompareAndSwap for NaN values. Store normal
 // (non-NaN) values on the CAS hot paths.
 type Float64 struct {

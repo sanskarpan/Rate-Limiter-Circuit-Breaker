@@ -71,15 +71,15 @@ func (RealClock) AfterFunc(d time.Duration, f func()) Timer {
 
 type realTimer struct{ t *time.Timer }
 
-func (r *realTimer) C() <-chan time.Time      { return r.t.C }
-func (r *realTimer) Stop() bool               { return r.t.Stop() }
+func (r *realTimer) C() <-chan time.Time        { return r.t.C }
+func (r *realTimer) Stop() bool                 { return r.t.Stop() }
 func (r *realTimer) Reset(d time.Duration) bool { return r.t.Reset(d) }
 
 type realTicker struct{ t *time.Ticker }
 
-func (r *realTicker) C() <-chan time.Time    { return r.t.C }
-func (r *realTicker) Stop()                  { r.t.Stop() }
-func (r *realTicker) Reset(d time.Duration)  { r.t.Reset(d) }
+func (r *realTicker) C() <-chan time.Time   { return r.t.C }
+func (r *realTicker) Stop()                 { r.t.Stop() }
+func (r *realTicker) Reset(d time.Duration) { r.t.Reset(d) }
 
 // manualTimer is a timer controlled by ManualClock.
 type manualTimer struct {

@@ -14,7 +14,7 @@ import (
 type timeoutErr struct{}
 
 func (timeoutErr) Error() string { return "i/o timeout" }
-func (timeoutErr) Timeout() bool  { return true }
+func (timeoutErr) Timeout() bool { return true }
 
 // TestIsConnectionError_Classification is the M-16 regression: ECONNREFUSED
 // wrapped in a *net.OpError is a connection error (previously missed because it

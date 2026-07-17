@@ -39,12 +39,3 @@ func validateKey(key string) error {
 	}
 	return nil
 }
-
-// sanitizeKey clamps key length and strips null bytes for safe use as a Redis key.
-// Returns the validated key or an error.
-func sanitizeKey(key string) (string, error) {
-	if err := validateKey(key); err != nil {
-		return "", err
-	}
-	return key, nil
-}

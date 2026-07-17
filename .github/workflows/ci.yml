@@ -10,32 +10,51 @@ permissions:
   contents: read
 
 env:
+  # Primary Go version (matches the go.mod floor). Used by non-matrix jobs and
+  # as the single matrix entry that uploads coverage.
   GO_VERSION: "1.24"
 
 jobs:
-  # ─── Unit tests ─────────────────────────────────────────────────────────────
+  # ─── Unit tests (Go version matrix) ─────────────────────────────────────────
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    strategy:
+      # Don't cancel the whole matrix if one Go version fails — we want to see
+      # which specific versions break.
+      fail-fast: false
+      matrix:
+        # go.mod floor ("1.24") plus the two most recent releases. Coverage is
+        # uploaded only from the primary version (see condition below).
+        go-version: ["1.24", "1.25", "1.26"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: ${{ matrix.go-version }}
           cache: true
 
       - name: Run tests with race detector
         run: go test -race -count=3 -timeout=5m ./...
 
       - name: Generate coverage
+        # Only compute coverage on the primary version; other entries just run
+        # the race suite above.
+        if: matrix.go-version == env.GO_VERSION
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
+        # Upload once (primary version only) to avoid duplicate reports.
+        # NOTE: on public repos a CODECOV_TOKEN repo secret may be required for
+        # the coverage badge to populate reliably. Add it under
+        # Settings → Secrets and variables → Actions if the badge stays empty.
+        if: matrix.go-version == env.GO_VERSION
         uses: codecov/codecov-action@v4
         with:
           file: coverage.out
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ─── Build ──────────────────────────────────────────────────────────────────
   build:
@@ -83,6 +102,8 @@ jobs:
           cache: true
 
       - name: golangci-lint
+        # version: latest resolves to golangci-lint v2, which matches the
+        # v2-format .golangci.yml in the repo.
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest

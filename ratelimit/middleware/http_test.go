@@ -18,7 +18,7 @@ type mockLimiter struct {
 	result ratelimit.Result
 }
 
-func (m *mockLimiter) Allow(_ context.Context, _ string) ratelimit.Result  { return m.result }
+func (m *mockLimiter) Allow(_ context.Context, _ string) ratelimit.Result { return m.result }
 func (m *mockLimiter) AllowN(_ context.Context, _ string, _ int) ratelimit.Result {
 	return m.result
 }

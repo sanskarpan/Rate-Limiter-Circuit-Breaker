@@ -16,7 +16,7 @@ func TestBuild_EnforcesCanonicalOrder(t *testing.T) {
 	// Add stages in deliberately reversed / scrambled order.
 	p := New().
 		Retry(&retry.Policy{MaxAttempts: 1}).
-		Timeout(5 * time.Millisecond).
+		Timeout(5*time.Millisecond).
 		CircuitBreaker(nil). // nil is fine; the stage fn isn't executed here
 		Bulkhead(1, 0).
 		RateLimit(nil, nil).

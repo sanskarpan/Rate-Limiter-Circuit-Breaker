@@ -21,10 +21,10 @@ type cbExecuteRequest struct {
 
 // cbResponse is the response for circuit breaker operations.
 type cbResponse struct {
-	State    string          `json:"state"`
-	Executed bool            `json:"executed"`
-	Snapshot *snapshotJSON   `json:"snapshot"`
-	Error    string          `json:"error,omitempty"`
+	State    string        `json:"state"`
+	Executed bool          `json:"executed"`
+	Snapshot *snapshotJSON `json:"snapshot"`
+	Error    string        `json:"error,omitempty"`
 }
 
 // snapshotJSON is a JSON-serialisable version of circuitbreaker.Snapshot.
