@@ -308,3 +308,22 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: npx next build
+
+  # ─── Contrib module (framework middleware adapters) ─────────────────────────
+  contrib:
+    name: Contrib (framework adapters)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build, vet & test the contrib module
+        working-directory: contrib
+        run: |
+          go build ./...
+          go vet ./...
+          go test -race ./...
