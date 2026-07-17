@@ -38,6 +38,13 @@ type Memory struct {
 	// maxKeys limits the number of keys to prevent memory exhaustion
 	maxKeys  int
 	keyCount atomic.Int64
+
+	// useServerTime mirrors RedisOptions.UseServerTime for the in-memory store so
+	// the memory-backed distributed tests can exercise the same server-time code
+	// path. When true, ServerTimeMode() reports true and the script emulations,
+	// on receiving use_server_time=1, substitute their OWN local clock as the
+	// authoritative "server" clock (the memory store IS the server).
+	useServerTime bool
 }
 
 // MemoryOption configures a Memory store.
@@ -55,6 +62,19 @@ func WithCleanupInterval(d time.Duration) MemoryOption {
 func WithMaxKeys(max int) MemoryOption {
 	return func(m *Memory) { m.maxKeys = max }
 }
+
+// WithServerTime enables server-time mode on the in-memory store, mirroring
+// RedisOptions.UseServerTime. It only affects ServerTimeMode() and the behaviour
+// of the script emulations when they receive use_server_time=1 (they then use
+// the store's own local clock as the authoritative server clock). Default off.
+func WithServerTime(on bool) MemoryOption {
+	return func(m *Memory) { m.useServerTime = on }
+}
+
+// ServerTimeMode reports whether server-time mode is enabled on this store. It
+// exists so callers can treat a *Memory and a *Redis uniformly via the interface
+// { ServerTimeMode() bool }.
+func (m *Memory) ServerTimeMode() bool { return m.useServerTime }
 
 // NewMemory creates a new in-memory Store.
 // Background goroutine evicts expired keys at cleanupInterval.
