@@ -18,7 +18,7 @@ COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
-    -ldflags="-s -w -X github.com/sanskarpan/resilience/server/version.Version=${VERSION}" \
+    -ldflags="-s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version=${VERSION}" \
     -o /build/demo-server \
     ./server/
 
@@ -27,7 +27,7 @@ FROM gcr.io/distroless/static:nonroot AS runtime
 
 LABEL org.opencontainers.image.title="resilience-demo" \
       org.opencontainers.image.description="Rate Limiter & Circuit Breaker demo server" \
-      org.opencontainers.image.source="https://github.com/sanskarpan/resilience"
+      org.opencontainers.image.source="https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
 
 # Copy binary from builder
 COPY --from=builder /build/demo-server /demo-server
