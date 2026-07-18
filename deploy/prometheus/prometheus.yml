@@ -2,13 +2,31 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Recording + alerting rules for the resilience toolkit. Paths are relative to
+# this config file. Reload after editing with `POST /-/reload` or SIGHUP.
+rule_files:
+  - rules.yml
+  - alerts.yml
+
+# Wire Alertmanager to receive the alerts defined in alerts.yml. Uncomment and
+# point at your Alertmanager instance (the docker-compose stack does not ship one
+# by default). See ./README.md for a minimal Alertmanager setup.
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - "alertmanager:9093"
+
 scrape_configs:
+  # The demo server exposes all resilience_* series on /metrics. In the shipped
+  # docker-compose stack it is reachable at the service DNS name `server`.
   - job_name: "resilience-demo"
     static_configs:
       - targets: ["server:8080"]
     metrics_path: /metrics
     scrape_interval: 5s
 
+  # Prometheus self-monitoring.
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
