@@ -53,16 +53,20 @@ func TestExecuteCB(t *testing.T) {
 		fnCalled  bool  // whether fn is expected to run
 	}{
 		{
-			name:      "success returns value",
-			breaker:   func(*testing.T) *circuitbreaker.CircuitBreaker { return circuitbreaker.New(circuitbreaker.Config{Name: "ok"}) },
+			name: "success returns value",
+			breaker: func(*testing.T) *circuitbreaker.CircuitBreaker {
+				return circuitbreaker.New(circuitbreaker.Config{Name: "ok"})
+			},
 			fn:        func(context.Context) (int, error) { return 42, nil },
 			wantValue: 42,
 			wantErr:   nil,
 			fnCalled:  true,
 		},
 		{
-			name:      "fn error returned verbatim with zero value",
-			breaker:   func(*testing.T) *circuitbreaker.CircuitBreaker { return circuitbreaker.New(circuitbreaker.Config{Name: "ok"}) },
+			name: "fn error returned verbatim with zero value",
+			breaker: func(*testing.T) *circuitbreaker.CircuitBreaker {
+				return circuitbreaker.New(circuitbreaker.Config{Name: "ok"})
+			},
 			fn:        func(context.Context) (int, error) { return 7, errBoom },
 			wantValue: 0,
 			wantErr:   errBoom,
@@ -165,12 +169,12 @@ func TestExecuteRetry(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		policy     *retry.Policy
-		fn         func(*int) func(context.Context) (int, error)
-		wantValue  int
-		wantErr    error
-		wantCalls  int
+		name      string
+		policy    *retry.Policy
+		fn        func(*int) func(context.Context) (int, error)
+		wantValue int
+		wantErr   error
+		wantCalls int
 	}{
 		{
 			name:   "success on first attempt",

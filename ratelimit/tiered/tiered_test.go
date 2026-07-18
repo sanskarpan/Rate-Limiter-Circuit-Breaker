@@ -244,7 +244,7 @@ func (peekLiesLimiter) Allow(ctx context.Context, key string) ratelimit.Result {
 func (peekLiesLimiter) AllowN(context.Context, string, int) ratelimit.Result {
 	return ratelimit.Result{Allowed: false, Limit: 10, Remaining: 0, RetryAfter: time.Second, Algorithm: "trap"}
 }
-func (peekLiesLimiter) Wait(context.Context, string) error  { return nil }
+func (peekLiesLimiter) Wait(context.Context, string) error       { return nil }
 func (peekLiesLimiter) WaitN(context.Context, string, int) error { return nil }
 func (peekLiesLimiter) Peek(_ context.Context, key string) ratelimit.State {
 	return ratelimit.State{Key: key, Limit: 10, Remaining: 10, Algorithm: "trap"}
