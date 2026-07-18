@@ -2,6 +2,7 @@ package bulkhead_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func TestBulkheadFiresRecorder(t *testing.T) {
 	<-started
 
 	// Second call must be rejected (no slot, non-blocking).
-	if err := bh.Execute(ctx, func(context.Context) error { return nil }); err != bulkhead.ErrBulkheadFull {
+	if err := bh.Execute(ctx, func(context.Context) error { return nil }); !errors.Is(err, bulkhead.ErrBulkheadFull) {
 		t.Fatalf("expected ErrBulkheadFull, got %v", err)
 	}
 

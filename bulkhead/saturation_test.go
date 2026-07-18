@@ -2,6 +2,7 @@ package bulkhead
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -209,7 +210,7 @@ func TestBulkhead_WaitTimeTrackedOnTimeout(t *testing.T) {
 
 	// This caller will time out after ~maxWait.
 	err := b.Execute(context.Background(), func(ctx context.Context) error { return nil })
-	if err != ErrBulkheadFull {
+	if !errors.Is(err, ErrBulkheadFull) {
 		t.Fatalf("expected ErrBulkheadFull, got %v", err)
 	}
 	close(hold)
