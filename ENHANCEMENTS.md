@@ -357,7 +357,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   that they run synchronously.
 - **References:** gobreaker `OnStateChange`, resilience4j event publisher.
 
-### 2.2 Functional-options constructor parity + a unified builder
+### 2.2 Functional-options constructor parity + a unified builder  
+> ✅ **Implemented & merged** — new `resilience` facade: fluent `Builder` composing rate-limit → bulkhead → timeout → circuit-breaker → retry (+ budget) with an outer fallback, plus generic `Execute[T]`; documents the layer-wrapping order and reuses the stable `pipeline.Builder` ordering internally.
 - **Category:** API · **Priority:** P2 · **Effort:** M
 - **Rationale:** Constructors are inconsistent: `tokenbucket.New(cap, rate, opts...)`,
   `gcra.New(limit, burst, window, opts...)`, `slidingwindow.NewLog(limit, window, opts...)`,
@@ -528,7 +529,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   recommendation.
 - **References:** `sony/gobreaker` counter design.
 
-### 3.5 Benchmark coverage gaps (middleware, composite, pipeline, adaptive)
+### 3.5 Benchmark coverage gaps (middleware, composite, pipeline, adaptive)  
+> ✅ **Implemented & merged** — added `Benchmark*` (with `ReportAllocs`) for ratelimit/middleware (HTTP+gRPC), composite, pipeline, adaptive, bulkhead, loadshed, concurrency and retry.
 - **Category:** Performance · **Priority:** P3 · **Effort:** S
 - **Rationale:** No benchmarks exist for the HTTP/gRPC middleware wrappers, the composite
   limiter's two-phase AND path (`composite.go:59`), the full pipeline, or the adaptive
@@ -610,7 +612,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** Logging on the hot path must be guarded by level checks.
 - **References:** stdlib `log/slog`, `slog.LevelVar` gating.
 
-### 4.5 Prometheus histograms with exemplars + native histograms
+### 4.5 Prometheus histograms with exemplars + native histograms  
+> ✅ **Implemented & merged** — `metric/prometheus` adapter options `WithNativeHistograms`/`WithNativeHistogramLimits`/`WithExemplars` + context-aware `ObserveDecisionCtx`/`ObserveCBExecutionCtx` that attach OTel trace-id/span-id exemplars when a sampled span is present; core `metric.Recorder` interface unchanged.
 - **Category:** Observability · **Priority:** P2 · **Effort:** M
 - **Rationale:** The only histogram (`resilience_http_request_duration_seconds`,
   `prometheus.go:58`) uses default buckets and no exemplars. Decision latency, breaker Execute
@@ -681,7 +684,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   cleanly. Gossip is approximate by nature.
 - **References:** AWS DynamoDB conditional writes, `bradfitz/gomemcache`, SWIM/memberlist.
 
-### 5.3 Key TTL/GC audit and hot-key protection
+### 5.3 Key TTL/GC audit and hot-key protection  
+> ✅ **Implemented & merged** — `docs/redis-key-lifecycle.md`: per-script TTL audit (every key sets/refreshes a PEXPIRE; ZSET pruning bounds sliding-log cardinality), in-memory emulation parity, janitor + `maxKeys` guard, and `allkeys-lru` hot-key notes.
 - **Category:** Distributed · **Priority:** P2 · **Effort:** S
 - **Rationale:** Distributed keys rely on Redis TTL for GC (e.g. token bucket TTL =
   fill-time, `redis.go:366-373`). Worth auditing that every script sets a TTL on *every*
@@ -695,7 +699,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   the sliding-window-log.
 - **References:** Redis key eviction policies, the existing `docker-compose.yml` `allkeys-lru`.
 
-### 5.4 First-class fix (or documented guarantee) for the float64/256ns snapping
+### 5.4 First-class fix (or documented guarantee) for the float64/256ns snapping  
+> ✅ **Implemented & merged** — documented ≤256ns precision guarantee (float64 ULP on ns TATs, never over-admits) with exported `store.PrecisionBoundNs` and `scripts_precision_test.go` asserting the bound + no over-admission.
 - **Category:** Distributed · **Priority:** P2 · **Effort:** M
 - **Rationale:** Nanosecond TAT/scores (~1.78e18) exceed float64's 2^53 exact-integer ceiling,
   snapping to ~256ns granularity when Redis evaluates them as Lua doubles — carefully documented
@@ -751,7 +756,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** Adds a test-only dependency (fine — not in core module runtime).
 - **References:** `pgregory.net/rapid`, `leanovate/gopter`, Hypothesis.
 
-### 6.2 Expand fuzzing to all algorithms + the Redis Lua scripts
+### 6.2 Expand fuzzing to all algorithms + the Redis Lua scripts  
+> ✅ **Implemented & merged** — native `Fuzz*` targets for sliding-window (log+counter), leaky bucket, adaptive, composite, and the in-memory Lua script emulation (token bucket / GCRA / leaky bucket), each seeded and invariant-checked.
 - **Category:** Testing · **Priority:** P2 · **Effort:** S
 - **Rationale:** Only token bucket and GCRA are fuzzed. Fixed window, sliding-window (log &
   counter), leaky bucket, composite, and — critically — the **script emulations vs real Redis**
@@ -977,7 +983,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Proposed approach:** `docs/adr/` with short numbered ADRs for the load-bearing decisions.
 - **References:** Michael Nygard ADR template.
 
-### 8.7 `doc.go` package overviews & pkg.go.dev polish
+### 8.7 `doc.go` package overviews & pkg.go.dev polish  
+> ✅ **Implemented & merged** — verified every core library package already carries an accurate package-level doc comment (several via dedicated `doc.go`); no gaps remained (adding more would trip the duplicate-package-comment vet check).
 - **Category:** Docs · **Priority:** P3 · **Effort:** S
 - **Rationale:** Package docs and `example_test.go` are strong (18 example files), but there are
   no dedicated `doc.go` overview files, which give pkg.go.dev a cleaner package landing page for
