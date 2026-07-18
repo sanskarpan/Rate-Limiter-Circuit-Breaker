@@ -34,6 +34,10 @@ type CircuitBreaker struct {
 	// HalfOpen probe tracking
 	halfOpenInflight     atomic.Int64
 	consecutiveSuccesses atomic.Int64
+	// halfOpenAt is the unix-nanosecond timestamp at which the current half-open
+	// episode began, 0 when not half-open. Ramp probe strategies read it (via
+	// ProbeContext.HalfOpenSince) to pace admission by elapsed time.
+	halfOpenAt atomic.Int64
 
 	// Metrics window (only one is used based on WindowType)
 	countWin *countWindow
@@ -196,7 +200,12 @@ func (cb *CircuitBreaker) beforeExecute() (acquiredProbe bool, err error) {
 	case StateOpen:
 		// Check if we should transition to HalfOpen (lazy)
 		if !cb.shouldAttemptReset() {
-			return false, &CircuitError{Name: cb.cfg.Name, State: state, Err: ErrCircuitOpen}
+			return false, &CircuitError{
+				Name:              cb.cfg.Name,
+				State:             state,
+				TimeUntilHalfOpen: cb.timeUntilHalfOpen(),
+				Err:               ErrCircuitOpen,
+			}
 		}
 		// Transition to HalfOpen
 		cb.transitionToHalfOpen()
@@ -204,12 +213,20 @@ func (cb *CircuitBreaker) beforeExecute() (acquiredProbe bool, err error) {
 		fallthrough
 	case StateHalfOpen:
 		// Acquire a probe slot with a CAS loop so the counter never even
-		// transiently exceeds HalfOpenMaxRequests (an optimistic Add-then-rollback
-		// would briefly overshoot under concurrency — H-8).
-		max := int64(cb.cfg.HalfOpenMaxRequests)
+		// transiently exceeds the strategy's allowance (an optimistic
+		// Add-then-rollback would briefly overshoot under concurrency — H-8).
+		// The allowance is recomputed each iteration from the current probe
+		// context so ramp strategies observe up-to-date success counts, and it
+		// is always clamped to HalfOpenMaxRequests.
+		strategy := cb.halfOpenStrategy()
 		for {
 			cur := cb.halfOpenInflight.Load()
-			if cur >= max {
+			pc := cb.probeContext(cur, cb.cfg.Clock)
+			allowed := strategy.MaxConcurrentProbes(pc)
+			if allowed > cb.cfg.HalfOpenMaxRequests {
+				allowed = cb.cfg.HalfOpenMaxRequests
+			}
+			if cur >= int64(allowed) {
 				return false, &CircuitError{Name: cb.cfg.Name, State: state, Err: ErrTooManyRequests}
 			}
 			if cb.halfOpenInflight.CompareAndSwap(cur, cur+1) {
@@ -337,6 +354,22 @@ func (cb *CircuitBreaker) shouldOpen() bool {
 	}
 }
 
+// timeUntilHalfOpen returns the estimated duration until an open circuit will
+// next admit a probe. It returns 0 when the circuit is not open or when the
+// open timeout has already elapsed. Used to enrich the ErrCircuitOpen rejection.
+func (cb *CircuitBreaker) timeUntilHalfOpen() time.Duration {
+	openedNs := cb.openedAt.Load()
+	if openedNs == 0 {
+		return 0
+	}
+	halfOpenAt := time.Unix(0, openedNs).Add(cb.cfg.OpenTimeout)
+	d := halfOpenAt.Sub(cb.cfg.Clock.Now())
+	if d < 0 {
+		return 0
+	}
+	return d
+}
+
 // shouldAttemptReset returns true if enough time has passed to try half-open.
 func (cb *CircuitBreaker) shouldAttemptReset() bool {
 	openedNs := cb.openedAt.Load()
@@ -361,6 +394,8 @@ func (cb *CircuitBreaker) transitionToOpen() {
 	}
 	cb.state.Store(int32(StateOpen))
 	cb.openedAt.Store(cb.cfg.Clock.Now().UnixNano())
+	// The half-open episode (if any) has ended; clear its start timestamp.
+	cb.halfOpenAt.Store(0)
 	// Do NOT reset halfOpenInflight here (H-9): probes still in flight own their
 	// own decrement in afterExecute. Resetting to 0 would let those decrements
 	// drive the counter negative.
@@ -386,6 +421,9 @@ func (cb *CircuitBreaker) transitionToHalfOpen() {
 		return // another goroutine already transitioned
 	}
 	cb.state.Store(int32(StateHalfOpen))
+	// Record when this half-open episode began so ramp strategies can pace
+	// admission by elapsed time (ProbeContext.HalfOpenSince).
+	cb.halfOpenAt.Store(cb.cfg.Clock.Now().UnixNano())
 	// Entering half-open from Open: no probes can be in flight (Open rejects all
 	// calls), so the counter is already 0. Don't Store(0) (H-9) — it would risk
 	// clobbering a decrement from a straggler released after this transition.
@@ -406,6 +444,8 @@ func (cb *CircuitBreaker) transitionToClosed() {
 	}
 	cb.state.Store(int32(StateClosed))
 	cb.openedAt.Store(0)
+	// The half-open episode has ended; clear its start timestamp.
+	cb.halfOpenAt.Store(0)
 	// Don't Store(0) halfOpenInflight here (H-9): a probe whose success triggered
 	// this transition still owns its decrement in afterExecute.
 	cb.consecutiveSuccesses.Store(0)
