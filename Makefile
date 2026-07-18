@@ -32,6 +32,12 @@ fuzz: ## Run fuzz tests (30s each)
 		go test -fuzz=$$target -fuzztime=30s ./ratelimit/fixedwindow/ 2>/dev/null || true; \
 	done
 
+fuzz-server: ## Fuzz the demo server's JSON decoders & simulator (§7.5, 15s each)
+	@for target in FuzzHandleAllow FuzzHandleCBExecute FuzzHandleSimulate FuzzClampSimulateRequest; do \
+		echo "Fuzzing $$target..."; \
+		go test -run=xxx -fuzz=$$target$$ -fuzztime=15s ./server/api/ || exit 1; \
+	done
+
 bench: ## Run all benchmarks
 	go test -bench=. -benchmem -count=5 ./... | tee bench-$(VERSION).txt
 

@@ -1,0 +1,138 @@
+# Prometheus alerting rules for the resilience toolkit.
+#
+# These fire on the real series emitted by the library core through the
+# metric.Recorder Prometheus adapter (metric/prometheus/prometheus.go), served
+# on the demo server's /metrics endpoint. Several expressions reuse the recording
+# rules in deploy/prometheus/rules.yml — load both files together.
+#
+# Load by referencing this file from prometheus.yml `rule_files:` and reloading
+# Prometheus (POST /-/reload or SIGHUP). Validate with:
+#   promtool check rules deploy/prometheus/alerts.yml
+#
+# Thresholds below are STARTING POINTS for the demo. Tune `expr` thresholds and
+# `for` windows to your traffic and SLOs before relying on them in production.
+
+groups:
+  # ── Rate limiter ────────────────────────────────────────────────────────────
+  - name: resilience_ratelimit.alerts
+    rules:
+      # A sustained high denial ratio means clients are being throttled hard —
+      # either a misconfigured limit, an abusive caller, or genuine overload.
+      # 50% of decisions denied for 10m is well past normal burst shaping.
+      - alert: RateLimitHighDenialRatio
+        expr: resilience:ratelimit_denial_ratio:rate5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate-limit denial ratio for {{ $labels.algorithm }}"
+          description: >-
+            {{ $labels.algorithm }} is denying {{ $value | humanizePercentage }}
+            of requests (>50%) over the last 5m, sustained for 10m. Check for an
+            under-provisioned limit, a hot key, or an abusive client.
+
+      # Near-total denial almost always means a broken/exhausted limiter or a
+      # traffic flood — page faster and at a higher severity.
+      - alert: RateLimitDenialCritical
+        expr: resilience:ratelimit_denial_ratio:rate5m > 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical rate-limit denial ratio for {{ $labels.algorithm }}"
+          description: >-
+            {{ $labels.algorithm }} is denying {{ $value | humanizePercentage }}
+            of requests (>90%) over the last 5m, sustained for 5m. Clients are
+            effectively locked out.
+
+      # Decision latency should be sub-millisecond for in-memory limiters and a
+      # few ms for Redis-backed ones. A p99 above 50ms points at store latency,
+      # lock contention, or GC pressure on the decision path.
+      - alert: RateLimitDecisionLatencyHigh
+        expr: resilience:ratelimit_decision_latency:p99_5m > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow rate-limit decisions for {{ $labels.algorithm }}"
+          description: >-
+            p99 rate-limit decision latency for {{ $labels.algorithm }} is
+            {{ $value | humanizeDuration }} (>50ms) over 10m. Investigate the
+            distributed store, lock contention, or GC.
+
+  # ── Circuit breaker ─────────────────────────────────────────────────────────
+  - name: resilience_circuitbreaker.alerts
+    rules:
+      # State gauge: 0=closed, 1=half-open, 2=open. A breaker that stays open
+      # (==2) for 5m indicates a dependency that is not recovering — the whole
+      # point of the breaker, but operators need to know it is latched open.
+      - alert: CircuitBreakerStuckOpen
+        expr: resilience_circuitbreaker_state == 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} stuck open"
+          description: >-
+            Breaker {{ $labels.name }} has been OPEN for 5m — its downstream
+            dependency is failing and all calls are being short-circuited.
+
+      # A breaker flapping in and out of half-open (state==1) suggests a
+      # dependency that recovers just enough to admit probes then fails again.
+      - alert: CircuitBreakerFlapping
+        expr: resilience_circuitbreaker_state == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} lingering in half-open"
+          description: >-
+            Breaker {{ $labels.name }} has been HALF-OPEN for 15m — probes are
+            neither consistently succeeding (to close) nor failing (to re-open).
+
+      # Even while closed, a high failure ratio is an early warning that the
+      # breaker is about to trip. 25% failures sustained for 10m is actionable.
+      - alert: CircuitBreakerHighFailureRatio
+        expr: resilience:cb_failure_ratio:rate5m > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated failure ratio on breaker {{ $labels.name }}"
+          description: >-
+            Breaker {{ $labels.name }} is seeing {{ $value | humanizePercentage }}
+            failures (>25%) over 5m, sustained for 10m — it may trip soon.
+
+  # ── Bulkhead ────────────────────────────────────────────────────────────────
+  - name: resilience_bulkhead.alerts
+    rules:
+      # Any sustained rejection rate means the bulkhead is saturated: concurrent
+      # demand exceeds its configured slot count and work is being shed. This is
+      # the primary saturation signal (the "U" in USE).
+      - alert: BulkheadRejectionsElevated
+        expr: resilience:bulkhead_rejected:rate5m > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Bulkhead {{ $labels.name }} shedding load"
+          description: >-
+            Bulkhead {{ $labels.name }} is rejecting {{ $value | humanize }} req/s
+            over 5m — concurrent demand exceeds its slot count. Raise the limit or
+            reduce upstream concurrency.
+
+      # High absolute in-flight count sustained near capacity is a leading
+      # indicator of the rejections above. There is no capacity gauge emitted, so
+      # this threshold (50) is illustrative — set it just below the bulkhead's
+      # configured MaxConcurrency for your deployment.
+      - alert: BulkheadNearSaturation
+        expr: resilience_bulkhead_inflight > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Bulkhead {{ $labels.name }} near saturation"
+          description: >-
+            Bulkhead {{ $labels.name }} has held {{ $value }} in-flight executions
+            for 5m. Adjust this threshold to sit just under the configured
+            MaxConcurrency for a true saturation signal.

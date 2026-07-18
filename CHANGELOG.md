@@ -5,14 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## How this changelog is produced
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat`, `fix`, `perf`, `docs`, `test`, `chore`, `ci`, `build`; see
+[CONTRIBUTING.md](CONTRIBUTING.md#commit-messages)). On every `v*` tag,
+**goreleaser** generates the GitHub Release notes automatically from those
+commits (see the `changelog:` section of [`.goreleaser.yaml`](.goreleaser.yaml)):
+
+- `feat:` → **Features**, `fix:` → **Bug fixes**, `perf:` → **Performance**;
+  everything else falls under **Others**.
+- `docs:`, `test:`, `chore:`, `ci:`, and merge commits are filtered out as noise.
+
+So the **GitHub Release page is generated** from commit history, while **this
+file is curated** in Keep-a-Changelog form for a human-readable, categorized
+narrative. When cutting a release: move the `## [Unreleased]` entries into a new
+dated version section, then tag — goreleaser fills in the machine-generated
+notes from the commits since the previous tag.
+
 ## [Unreleased]
 
-Nothing yet. Add user-facing changes here as they land.
+### Added
 
-## [0.1.0] - unreleased
+- Prometheus recording & alerting rules under `deploy/prometheus/`
+  (`rules.yml`, `alerts.yml`) covering rate-limit denial ratio, circuit-breaker
+  stuck-open, bulkhead saturation, and decision-latency SLOs, plus a `README.md`
+  documenting how to load them and wire Alertmanager.
 
-No git tag has been cut yet; the entries below describe the current state of
-`main` and will be dated when `0.1.0` is released.
+## [0.1.0] - 2026-07-17
 
 ### Added
 
@@ -64,5 +84,5 @@ No git tag has been cut yet; the entries below describe the current state of
 - Circuit Breaker (closed): 82 ns/op, 0 allocs
 - All core packages: zero external runtime dependencies
 
-[Unreleased]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/main...HEAD
-[0.1.0]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/tree/main
+[Unreleased]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/releases/tag/v0.1.0

@@ -177,6 +177,21 @@ docs(contributing): document integration test setup
 Keep the summary in the imperative mood and under ~72 characters. Use the body
 to explain the *why* when it is not obvious.
 
+### How commits become the changelog
+
+Commit types drive release notes automatically. On every `v*` tag, **goreleaser**
+generates the GitHub Release notes from the commits since the previous tag (see
+the `changelog:` section of [`.goreleaser.yaml`](.goreleaser.yaml)):
+
+- `feat:` → **Features**, `fix:` → **Bug fixes**, `perf:` → **Performance**;
+  anything else lands under **Others**.
+- `docs:`, `test:`, `chore:`, `ci:`, and merge commits are filtered out as noise.
+
+That is why the commit type matters: a well-typed history produces a clean,
+categorized release page with zero extra effort. [CHANGELOG.md](CHANGELOG.md)
+remains a hand-curated, human-readable companion in Keep-a-Changelog form — see
+its header for the full flow.
+
 ## Pull requests
 
 - Fill out the PR template completely and link the issue you are addressing.

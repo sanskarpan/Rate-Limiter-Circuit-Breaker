@@ -304,7 +304,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   type-safe. Keep the cache pluggable.
 - **References:** Polly fallback + caching, Hystrix request cache, `golang.org/x/sync/singleflight`.
 
-### 1.11 Half-open probe strategies (gradual ramp / probe budget)
+### 1.11 Half-open probe strategies (gradual ramp / probe budget)  
+> ✅ **Implemented & merged** — `circuitbreaker`: pluggable `HalfOpenStrategy` (fixed cap default = legacy behavior; `RampProbeStrategy` linear/exponential ramp with `MinInterval`), clock-injected & race-tested.
 - **Category:** Algorithms · **Priority:** P2 · **Effort:** M
 - **Rationale:** A single-probe half-open recovers slowly; a fixed concurrent-probe count can
   slam a still-fragile dependency. Gradual ramp (1→2→4…) recovers faster *and* safer.
@@ -319,7 +320,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   (default = current fixed behavior).
 - **References:** resilience4j half-open, Polly, Hystrix rolling recovery.
 
-### 1.12 Per-attempt deadline budgeting in the pipeline
+### 1.12 Per-attempt deadline budgeting in the pipeline  
+> ✅ **Implemented & merged** — `pipeline.Builder.RetryBudgeted` with `WithPerAttemptTimeout` / `WithAttemptBudgeting`: each attempt gets a context deadline = min(overall remaining, per-attempt budget); retries stop when the budget is exhausted.
 - **Category:** Algorithms · **Priority:** P2 · **Effort:** M
 - **Rationale:** A single shared deadline across all retries can spend the whole budget on
   attempt 1; per-attempt budgeting (or deadline propagation with reserve) gives every attempt
@@ -414,7 +416,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   (CI `verify-zero-deps` guards this). Consider a separate `/contrib` module.
 - **References:** `ulule/limiter` (which ships many framework stores/middlewares), `didip/tollbooth`.
 
-### 2.5 Error taxonomy: typed circuit-breaker & bulkhead errors
+### 2.5 Error taxonomy: typed circuit-breaker & bulkhead errors  
+> ✅ **Implemented & merged** — enriched `*circuitbreaker.CircuitError` (Name/State/TimeUntilHalfOpen + `IsOpen`/`IsTooManyRequests`/`AsCircuitError`) and new `*bulkhead.BulkheadError` (Name/Capacity/Inflight/Waiting + `IsBulkheadFull`/`AsBulkheadError`), both still satisfying `errors.Is` against the existing sentinels.
 - **Category:** API · **Priority:** P2 · **Effort:** S
 - **Rationale:** Rate limiting has a rich `RateLimitError` with `Unwrap`/`Is`
   (`ratelimit/errors.go:29-60`), but resilience packages are thinner. Callers need to
@@ -855,7 +858,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Advisories) and enable GitHub private vulnerability reporting.
 - **References:** GitHub Security Advisories.
 
-### 7.4 Demo server self-protection & DoS surface
+### 7.4 Demo server self-protection & DoS surface  
+> ✅ **Implemented & merged** — request body cap (413), server timeouts, dogfooded per-IP rate limit (429) + global control-plane concurrency guard (503) on mutating endpoints, all configurable via `server/config`.
 - **Category:** Security · **Priority:** P2 · **Effort:** M
 - **Rationale:** The demo server has solid basics — constant-time API-key compare
   (`server/api/middleware.go:239-255`), 1 MiB body cap (`middleware.go:218-229`), key
@@ -869,7 +873,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   demo is not a hardened public service.
 - **References:** OWASP API Security Top 10, the library's own `bulkhead`/`ratelimit`.
 
-### 7.5 Fuzz the server's JSON decoders & the simulator
+### 7.5 Fuzz the server's JSON decoders & the simulator  
+> ✅ **Implemented & merged** — native fuzz targets (`FuzzHandleAllow`/`FuzzHandleCBExecute`/`FuzzHandleSimulate`/`FuzzClampSimulateRequest`) with seed corpora; `make fuzz-server`.
 - **Category:** Security · **Priority:** P3 · **Effort:** S
 - **Rationale:** Request bodies are JSON-decoded but not schema-fuzzed. The simulate handler
   (`server/api/simulate_handler.go`) takes numeric params that could be adversarial (huge N,
@@ -1014,7 +1019,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   with values for image tag, replicas, resources, Redis, and Prometheus scraping.
 - **References:** Helm best practices.
 
-### 9.4 CHANGELOG automation
+### 9.4 CHANGELOG automation  
+> ✅ **Implemented & merged** — goreleaser Conventional-Commits changelog grouping + seeded `CHANGELOG.md` and a CONTRIBUTING note on commits→changelog.
 - **Category:** Release · **Priority:** P2 · **Effort:** S
 - **Rationale:** `CHANGELOG.md` (Keep-a-Changelog format) is manually curated. Automating it
   from Conventional Commits removes toil and drift.
@@ -1031,7 +1037,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Proposed approach:** goreleaser Homebrew tap + a documented `go install` path.
 - **References:** goreleaser brew.
 
-### 9.6 Prometheus alerting & recording rules
+### 9.6 Prometheus alerting & recording rules  
+> ✅ **Implemented & merged** — `deploy/prometheus/` recording rules + alerts (denial ratio, CB stuck-open/flapping, bulkhead saturation) over the real emitted metric names, with a load/Alertmanager README.
 - **Category:** Operability · **Priority:** P3 · **Effort:** S
 - **Rationale:** `deploy/prometheus/prometheus.yml` scrapes but ships **no alert rules** (e.g.
   "breaker open", "denial rate spike") and no recording rules. Dashboards without alerts are

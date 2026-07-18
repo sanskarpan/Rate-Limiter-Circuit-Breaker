@@ -1,0 +1,91 @@
+# Prometheus recording rules for the resilience toolkit.
+#
+# These precompute the ratios and rates that back the Grafana dashboard
+# (deploy/grafana/dashboards/resilience.json) and the alerting rules
+# (deploy/prometheus/alerts.yml). Precomputing them here keeps dashboard
+# panels and alert expressions cheap, consistent, and readable.
+#
+# Every series referenced below is REAL — emitted by the library core through
+# the metric.Recorder Prometheus adapter (metric/prometheus/prometheus.go) and
+# exposed on the demo server's /metrics endpoint:
+#
+#   resilience_ratelimit_requests_total{algorithm,result}          result=allowed|denied
+#   resilience_ratelimit_decision_duration_seconds_bucket{algorithm,le}
+#   resilience_circuitbreaker_state{name}                          0=closed,1=half-open,2=open
+#   resilience_circuitbreaker_requests_total{name,result}          result=success|failure|rejected
+#   resilience_circuitbreaker_execution_duration_seconds_bucket{name,le}
+#   resilience_bulkhead_inflight{name}
+#   resilience_bulkhead_rejected_total{name}
+#
+# Load by referencing this file from prometheus.yml `rule_files:` and reloading
+# Prometheus (POST /-/reload or SIGHUP). Validate with:
+#   promtool check rules deploy/prometheus/rules.yml
+#
+# The 5m rate window matches the default 15s scrape interval well (≥4 samples)
+# while staying responsive; tune it to your scrape_interval if you change it.
+
+groups:
+  # ── Rate limiter ────────────────────────────────────────────────────────────
+  - name: resilience_ratelimit.recording
+    interval: 15s
+    rules:
+      # Per-algorithm request throughput (allowed + denied), in req/s.
+      - record: resilience:ratelimit_requests:rate5m
+        expr: sum by (algorithm) (rate(resilience_ratelimit_requests_total[5m]))
+
+      # Per-algorithm denied throughput, in req/s.
+      - record: resilience:ratelimit_denied:rate5m
+        expr: sum by (algorithm) (rate(resilience_ratelimit_requests_total{result="denied"}[5m]))
+
+      # Fraction of rate-limit decisions that were denied, per algorithm (0..1).
+      # `> bool 0` guard avoids 0/0 = NaN when an algorithm sees no traffic.
+      - record: resilience:ratelimit_denial_ratio:rate5m
+        expr: |
+          sum by (algorithm) (rate(resilience_ratelimit_requests_total{result="denied"}[5m]))
+          /
+          clamp_min(sum by (algorithm) (rate(resilience_ratelimit_requests_total[5m])), 1e-9)
+
+      # p99 rate-limit decision latency (seconds), per algorithm.
+      - record: resilience:ratelimit_decision_latency:p99_5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (algorithm, le) (rate(resilience_ratelimit_decision_duration_seconds_bucket[5m]))
+          )
+
+  # ── Circuit breaker ─────────────────────────────────────────────────────────
+  - name: resilience_circuitbreaker.recording
+    interval: 15s
+    rules:
+      # Per-breaker execution throughput (all results), in req/s.
+      - record: resilience:cb_requests:rate5m
+        expr: sum by (name) (rate(resilience_circuitbreaker_requests_total[5m]))
+
+      # Per-breaker failure ratio over its executions (success+failure+rejected),
+      # 0..1. Rejected calls (short-circuited while open) are counted in the
+      # denominator on purpose so a wide-open breaker reads as high failure.
+      - record: resilience:cb_failure_ratio:rate5m
+        expr: |
+          sum by (name) (rate(resilience_circuitbreaker_requests_total{result="failure"}[5m]))
+          /
+          clamp_min(sum by (name) (rate(resilience_circuitbreaker_requests_total[5m])), 1e-9)
+
+      # Per-breaker rejected (short-circuited) throughput, in req/s.
+      - record: resilience:cb_rejected:rate5m
+        expr: sum by (name) (rate(resilience_circuitbreaker_requests_total{result="rejected"}[5m]))
+
+      # p99 protected-call latency (seconds), per breaker.
+      - record: resilience:cb_execution_latency:p99_5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (name, le) (rate(resilience_circuitbreaker_execution_duration_seconds_bucket[5m]))
+          )
+
+  # ── Bulkhead ────────────────────────────────────────────────────────────────
+  - name: resilience_bulkhead.recording
+    interval: 15s
+    rules:
+      # Per-bulkhead rejection throughput, in req/s.
+      - record: resilience:bulkhead_rejected:rate5m
+        expr: sum by (name) (rate(resilience_bulkhead_rejected_total[5m]))
