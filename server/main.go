@@ -122,7 +122,17 @@ func main() {
 	var ready atomic.Bool
 
 	// ── HTTP server ──────────────────────────────────────────────────────────
-	handler, hub := api.NewRouterWithHub(limiters, cbs, registry, logger, &ready, cfg.CORSOrigins, cfg.APIKey)
+	// §7.4: wire the demo server's self-protection limits from config (per-IP
+	// rate limit, global control-plane concurrency guard, body-size cap).
+	spCfg := api.SelfProtectConfig{
+		MaxRequestBytes: cfg.MaxRequestBytes,
+		RatePerIP:       cfg.SelfRateLimitPerIP,
+		Burst:           cfg.SelfRateLimitBurst,
+		MaxInflight:     cfg.MaxInflightControl,
+	}
+	handler, hub, spClose := api.NewRouterWithHubAndProtection(
+		limiters, cbs, registry, logger, &ready, cfg.CORSOrigins, cfg.APIKey, spCfg)
+	defer spClose()
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),

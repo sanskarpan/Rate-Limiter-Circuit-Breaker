@@ -215,17 +215,33 @@ func Recovery(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// LimitRequestBody middleware restricts incoming request bodies to maxRequestBodyBytes.
+// LimitRequestBody middleware restricts incoming request bodies to the default
+// maxRequestBodyBytes (1 MiB). Retained for backward compatibility; new callers
+// should use LimitRequestBodyN to make the cap configurable (§7.4).
 func LimitRequestBody(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > maxRequestBodyBytes {
-			writeError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large",
-				fmt.Sprintf("request body must not exceed %d bytes", maxRequestBodyBytes))
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
-		next.ServeHTTP(w, r)
-	})
+	return LimitRequestBodyN(maxRequestBodyBytes)(next)
+}
+
+// LimitRequestBodyN returns a middleware that restricts incoming request bodies
+// to at most maxBytes. It rejects requests whose declared Content-Length exceeds
+// the cap with 413, and installs an http.MaxBytesReader so streamed bodies that
+// exceed the cap also fail (defending against a lying/absent Content-Length). A
+// maxBytes <= 0 falls back to the default 1 MiB cap.
+func LimitRequestBodyN(maxBytes int64) func(http.Handler) http.Handler {
+	if maxBytes <= 0 {
+		maxBytes = maxRequestBodyBytes
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > maxBytes {
+				writeError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large",
+					fmt.Sprintf("request body must not exceed %d bytes", maxBytes))
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // APIKeyAuth returns a middleware that enforces API-key authentication when a
