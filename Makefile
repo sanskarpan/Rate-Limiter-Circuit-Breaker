@@ -86,7 +86,7 @@ godoc: ## Serve godoc locally
 verify-deps: ## Verify core algorithm packages have zero external runtime dependencies
 	@# Core packages (algorithms + pure logic) must have zero external deps.
 	@# Adapter packages (middleware/, store/) are allowed to import gRPC/Redis.
-	@CORE_PKGS="./ratelimit ./ratelimit/tokenbucket ./ratelimit/gcra ./ratelimit/fixedwindow ./ratelimit/slidingwindow ./ratelimit/leakybucket ./ratelimit/adaptive ./ratelimit/composite ./circuitbreaker ./bulkhead ./retry ./retry/backoff ./timeout ./fallback ./pipeline ./internal/clock ./internal/atomicx ./loadshed ./concurrency ./metric"; \
+	@CORE_PKGS="./ratelimit ./ratelimit/tokenbucket ./ratelimit/gcra ./ratelimit/fixedwindow ./ratelimit/slidingwindow ./ratelimit/leakybucket ./ratelimit/adaptive ./ratelimit/composite ./circuitbreaker ./bulkhead ./retry ./retry/backoff ./timeout ./fallback ./pipeline ./internal/clock ./internal/atomicx ./loadshed ./concurrency ./metric ./debounce ./ratelimit/tiered ./resiliencex"; \
 	FAILED=0; \
 	for pkg in $$CORE_PKGS; do \
 		if [ -d "$$pkg" ]; then \
