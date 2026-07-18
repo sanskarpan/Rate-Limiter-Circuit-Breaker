@@ -18,23 +18,14 @@ type simulateRequest struct {
 	Key               string  `json:"key"`
 }
 
-// HandleSimulate handles POST /api/v1/simulate
-func (h *Handlers) HandleSimulate(w http.ResponseWriter, r *http.Request) {
-	var req simulateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "bad_request", "invalid JSON: "+err.Error())
-		return
-	}
-
+// clampSimulateRequest applies defaults and bounds to a decoded simulateRequest
+// in place, defending the simulator against adversarial params (huge N, negative
+// rates, runaway durations). Extracted so it can be unit- and fuzz-tested
+// (§7.5) independently of running the (slow) simulation engine.
+func clampSimulateRequest(req *simulateRequest) {
 	if req.Algorithm == "" {
 		req.Algorithm = "token_bucket"
 	}
-	limiter, ok := h.limiters[req.Algorithm]
-	if !ok {
-		writeError(w, r, http.StatusNotFound, "not_found", "unknown algorithm: "+req.Algorithm)
-		return
-	}
-
 	if req.Pattern == "" {
 		req.Pattern = "constant"
 	}
@@ -48,8 +39,9 @@ func (h *Handlers) HandleSimulate(w http.ResponseWriter, r *http.Request) {
 	if req.RequestsPerSecond <= 0 {
 		req.RequestsPerSecond = 20
 	}
-	// Cap RPS to prevent resource exhaustion.
-	if req.RequestsPerSecond > 10_000 {
+	// Cap RPS to prevent resource exhaustion. Also guards against NaN/Inf from
+	// adversarial JSON: a NaN fails every comparison, so normalise it here.
+	if req.RequestsPerSecond > 10_000 || req.RequestsPerSecond != req.RequestsPerSecond {
 		req.RequestsPerSecond = 10_000
 	}
 	if req.Concurrency <= 0 {
@@ -62,8 +54,41 @@ func (h *Handlers) HandleSimulate(w http.ResponseWriter, r *http.Request) {
 	if req.Key == "" {
 		req.Key = "simulate"
 	}
+}
+
+// decodeSimulateRequest decodes and validates the /simulate body. It returns the
+// clamped request or a *simError describing how to respond. Split out for §7.5
+// fuzzing without executing the engine.
+func decodeSimulateRequest(r *http.Request) (simulateRequest, *simError) {
+	var req simulateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return req, &simError{http.StatusBadRequest, "bad_request", "invalid JSON: " + err.Error()}
+	}
+	clampSimulateRequest(&req)
 	if err := validateKey(req.Key); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_key", err.Error())
+		return req, &simError{http.StatusBadRequest, "invalid_key", err.Error()}
+	}
+	return req, nil
+}
+
+// simError carries a status/code/message for a failed simulate decode.
+type simError struct {
+	status  int
+	code    string
+	message string
+}
+
+// HandleSimulate handles POST /api/v1/simulate
+func (h *Handlers) HandleSimulate(w http.ResponseWriter, r *http.Request) {
+	req, serr := decodeSimulateRequest(r)
+	if serr != nil {
+		writeError(w, r, serr.status, serr.code, serr.message)
+		return
+	}
+
+	limiter, ok := h.limiters[req.Algorithm]
+	if !ok {
+		writeError(w, r, http.StatusNotFound, "not_found", "unknown algorithm: "+req.Algorithm)
 		return
 	}
 
