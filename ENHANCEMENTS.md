@@ -233,7 +233,10 @@ the library demonstrably more competitive than the incumbents it's measured agai
   as the default, float opt-in.
 - **References:** Stripe rate-limit blog, Shopify GraphQL cost-based limiting, GitHub API points.
 
-### 1.6 Hierarchical / tiered limits
+### 1.6 Hierarchical / tiered limits  
+> ✅ **Implemented & merged** — `ratelimit/tiered` (`TieredLimiter`): ordered tier chain,
+> per-tier `KeyFunc`, check-then-commit with rollback (via optional `Crediter`) so a lower
+> tier's deny never leaves a higher tier debited; denying tier surfaced in `Result.Metadata`.
 - **Category:** Algorithms · **Priority:** P2 · **Effort:** M
 - **Rationale:** Common real requirement: "10 req/s per user **and** 1000 req/s per org **and**
   100k req/s global". Users must currently hand-wire multiple composites and keys.
@@ -274,7 +277,10 @@ the library demonstrably more competitive than the incumbents it's measured agai
   worth it — a doc note may suffice.
 - **References:** Stripe GCRA writeup (leaky-bucket-as-GCRA duality).
 
-### 1.9 Debounce / throttle primitives
+### 1.9 Debounce / throttle primitives  
+> ✅ **Implemented & merged** — `debounce` package: `Debouncer` (trailing edge + optional
+> leading + max-wait) and `Throttler` (at-most-once-per-interval, leading + optional trailing),
+> both clock-injectable for deterministic tests and safe for concurrent use.
 - **Category:** Algorithms · **Priority:** P3 · **Effort:** S
 - **Rationale:** Frequently-requested lightweight primitives (coalesce bursts, trailing-edge
   throttle) that pair naturally with a resilience toolkit.
@@ -365,7 +371,11 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Changing panic→error is a breaking change — do it pre-1.0.
 - **References:** `x/time/rate` (single `NewLimiter`), Dave Cheney functional options.
 
-### 2.3 Generic `Execute[T]` on the core resilience paths
+### 2.3 Generic `Execute[T]` on the core resilience paths  
+> ✅ **Implemented & merged** — `resiliencex` package: generic value-returning wrappers
+> `ExecuteCB[T]`, `ExecuteCBWithFallback[T]`, `ExecuteRetry[T]`, `ExecuteBulkhead[T]` that
+> preserve each primitive's error verbatim (`errors.Is` works through them) and return the
+> zero value of `T` on error.
 - **Category:** API · **Priority:** P2 · **Effort:** M
 - **Rationale:** Only `retry`, `timeout`, and `fallback` have `DoWithResult[T]`; the circuit
   breaker, bulkhead, and pipeline `Execute` take `func() error` and force callers to capture
@@ -691,7 +701,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   the key schema.
 - **References:** IEEE-754 double precision, Redis Lua number semantics, GCRA writeups.
 
-### 5.5 Consistency-guarantee documentation matrix
+### 5.5 Consistency-guarantee documentation matrix  
+> ✅ **Implemented & merged**
 - **Category:** Distributed · **Priority:** P2 · **Effort:** S
 - **Rationale:** Users must know exactly what "distributed" guarantees under Redis failover,
   cluster resharding, and the fail-open fallback (which silently degrades to **per-instance ×N**
@@ -702,7 +713,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   fail-open vs fail-closed per algorithm, and the accuracy bound from §5.4.
 - **References:** Jepsen-style guarantee docs, Redis Cluster consistency notes.
 
-### 5.6 Multi-region / active-active strategy note or CRDT counter
+### 5.6 Multi-region / active-active strategy note or CRDT counter  
+> ✅ **Implemented & merged**
 - **Category:** Distributed · **Priority:** P3 · **Effort:** L
 - **Rationale:** Global limits across regions need either a single authoritative store (latency)
   or approximate CRDT counters (eventual). Neither is addressed.
@@ -832,7 +844,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   (`slsa-framework/slsa-github-generator`). goreleaser (§9.1) does most of this natively.
 - **References:** SLSA framework, sigstore/cosign, syft, goreleaser signing.
 
-### 7.3 Fill the SECURITY.md contact placeholder
+### 7.3 Fill the SECURITY.md contact placeholder  
+> ✅ **Implemented & merged**
 - **Category:** Security · **Priority:** P1 · **Effort:** S
 - **Rationale:** `SECURITY.md` has a `[PLACEHOLDER]` security-contact email. A disclosure
   policy that can't receive reports is worse than none.
@@ -931,7 +944,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   methodology.
 - **References:** `x/perf`, published Go library benchmark comparisons.
 
-### 8.5 API stability policy & versioned guarantees
+### 8.5 API stability policy & versioned guarantees  
+> ✅ **Implemented & merged**
 - **Category:** Docs · **Priority:** P2 · **Effort:** S
 - **Rationale:** Pre-1.0 SemVer is noted, but there's no statement of *which* surface is stable
   vs experimental (e.g. `Limiter` interface stable; `internal/` and adaptive experimental). This
@@ -941,7 +955,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   stable/beta/experimental, with a deprecation policy.
 - **References:** Go module compatibility guidelines, k8s API stability tiers.
 
-### 8.6 Architecture Decision Records (ADRs)
+### 8.6 Architecture Decision Records (ADRs)  
+> ✅ **Implemented & merged**
 - **Category:** Docs · **Priority:** P3 · **Effort:** S
 - **Rationale:** Key decisions (fixed pipeline order `pipeline.go:6-20`, fail-open Redis,
   panic-on-bad-input, zero-dep core, client-time in Lua) are captured only in code comments and
