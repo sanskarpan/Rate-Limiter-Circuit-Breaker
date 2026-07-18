@@ -22,9 +22,11 @@
 package prometheus
 
 import (
+	"context"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
@@ -49,6 +51,12 @@ type Recorder struct {
 	cbExecution   *prometheus.HistogramVec
 	bhInflight    *prometheus.GaugeVec
 	bhRejected    *prometheus.CounterVec
+
+	// exemplars, when true, causes the Ctx-variant observe methods to attach a
+	// trace_id exemplar to histogram samples whenever the supplied context
+	// carries a sampled span. It has no effect on the context-free
+	// ObserveDecision / ObserveCBExecution methods used by the core.
+	exemplars bool
 }
 
 // Compile-time assertion that *Recorder satisfies the core interface.
@@ -61,21 +69,32 @@ var _ metric.Recorder = (*Recorder)(nil)
 //
 // Pass prometheus.DefaultRegisterer to expose the series through the default
 // promhttp handler.
-func New(reg prometheus.Registerer) *Recorder {
+//
+// Optional functional options (WithNativeHistograms, WithExemplars) tune the
+// duration histograms. With no options the behavior is identical to previous
+// releases (classic fixed-bucket histograms, no exemplars), so existing callers
+// need no changes.
+func New(reg prometheus.Registerer, opts ...Option) *Recorder {
 	if reg == nil {
 		reg = prometheus.DefaultRegisterer
 	}
-	r := &Recorder{}
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	r := &Recorder{exemplars: cfg.exemplars}
 	r.rlRequests = registerCounterVec(reg, prometheus.CounterOpts{
 		Name: "resilience_ratelimit_requests_total",
 		Help: "Total rate-limit decisions, partitioned by algorithm and result (allowed|denied).",
 	}, []string{"algorithm", "result"})
 
-	r.rlDecision = registerHistogramVec(reg, prometheus.HistogramOpts{
+	rlDecisionOpts := prometheus.HistogramOpts{
 		Name:    "resilience_ratelimit_decision_duration_seconds",
 		Help:    "Rate-limit decision latency in seconds, partitioned by algorithm.",
 		Buckets: decisionBuckets,
-	}, []string{"algorithm"})
+	}
+	cfg.applyNative(&rlDecisionOpts)
+	r.rlDecision = registerHistogramVec(reg, rlDecisionOpts, []string{"algorithm"})
 
 	r.cbState = registerGaugeVec(reg, prometheus.GaugeOpts{
 		Name: "resilience_circuitbreaker_state",
@@ -92,11 +111,13 @@ func New(reg prometheus.Registerer) *Recorder {
 		Help: "Total circuit-breaker state transitions, partitioned by name and from/to state.",
 	}, []string{"name", "from", "to"})
 
-	r.cbExecution = registerHistogramVec(reg, prometheus.HistogramOpts{
+	cbExecOpts := prometheus.HistogramOpts{
 		Name:    "resilience_circuitbreaker_execution_duration_seconds",
 		Help:    "Circuit-breaker protected-call latency in seconds, partitioned by name.",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"name"})
+	}
+	cfg.applyNative(&cbExecOpts)
+	r.cbExecution = registerHistogramVec(reg, cbExecOpts, []string{"name"})
 
 	r.bhInflight = registerGaugeVec(reg, prometheus.GaugeOpts{
 		Name: "resilience_bulkhead_inflight",
@@ -200,6 +221,42 @@ func (r *Recorder) IncCBResult(name, result string) {
 // ObserveCBExecution records a circuit-breaker protected-call latency.
 func (r *Recorder) ObserveCBExecution(name string, d time.Duration) {
 	r.cbExecution.WithLabelValues(name).Observe(d.Seconds())
+}
+
+// ObserveDecisionCtx records a rate-limit decision latency for algorithm and,
+// when the Recorder was built WithExemplars and ctx carries a sampled OTel span,
+// attaches a trace_id exemplar linking the histogram sample to the trace.
+//
+// It is a drop-in replacement for ObserveDecision on code paths that hold a
+// context. When no span is present (or exemplars are disabled) it is exactly
+// equivalent to ObserveDecision and performs no extra allocation.
+func (r *Recorder) ObserveDecisionCtx(ctx context.Context, algorithm string, d time.Duration) {
+	r.observe(ctx, r.rlDecision.WithLabelValues(algorithm), d)
+}
+
+// ObserveCBExecutionCtx records a circuit-breaker protected-call latency for
+// name and, when the Recorder was built WithExemplars and ctx carries a sampled
+// OTel span, attaches a trace_id exemplar. See ObserveDecisionCtx.
+func (r *Recorder) ObserveCBExecutionCtx(ctx context.Context, name string, d time.Duration) {
+	r.observe(ctx, r.cbExecution.WithLabelValues(name), d)
+}
+
+// observe records d.Seconds() on obs, attaching a trace_id exemplar when
+// exemplars are enabled and ctx carries a sampled span. The exemplar path is
+// entirely skipped (zero cost) otherwise.
+func (r *Recorder) observe(ctx context.Context, obs prometheus.Observer, d time.Duration) {
+	if r.exemplars {
+		if sc := trace.SpanContextFromContext(ctx); sc.IsSampled() {
+			if eo, ok := obs.(prometheus.ExemplarObserver); ok {
+				eo.ObserveWithExemplar(d.Seconds(), prometheus.Labels{
+					"trace_id": sc.TraceID().String(),
+					"span_id":  sc.SpanID().String(),
+				})
+				return
+			}
+		}
+	}
+	obs.Observe(d.Seconds())
 }
 
 // IncCBTransition increments the state-transition counter for name from→to.

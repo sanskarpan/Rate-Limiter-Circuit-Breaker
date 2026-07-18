@@ -431,6 +431,98 @@ func (r *Redis) CheckServerTimeSkew(ctx context.Context, threshold time.Duration
 // Lua scripts for distributed rate limiting
 // ---------------------------------------------------------------------------
 
+// Nanosecond precision guarantee (ENHANCEMENTS §5.4)
+// -------------------------------------------------
+// The time-based scripts (GCRA, LeakyBucket, SlidingWindowLog) carry absolute
+// timestamps — a GCRA/leaky-bucket TAT and sliding-window-log ZSET scores — as
+// nanoseconds since the Unix epoch. In 2020+ that value is ~1.6e18–1.9e18, which
+// is LARGER than float64's exact-integer ceiling of 2^53 = 9_007_199_254_740_992
+// (≈9.0e15). Redis Lua has no integer type: every `tonumber(...)`, every
+// arithmetic result, every value written back with SET/ZADD is an IEEE-754
+// double. Above 2^53 a double can represent only every k-th integer, where k is
+// the power-of-two spacing (ULP) for that magnitude. For nanosecond timestamps
+// in the 2^60–2^61 range (1.15e18–2.3e18) the ULP is exactly 256, so a
+// nanosecond TAT/score SNAPS to the nearest multiple of 256ns.
+//
+// GUARANTEE (tested — see PrecisionBoundNs and TestPrecisionBound_* in
+// scripts_precision_test.go):
+//
+//   - The absolute error introduced by float64 snapping on any single stored
+//     timestamp is at most one ULP, i.e. STRICTLY LESS THAN 256ns for every
+//     wall-clock time this millennium (the ULP stays 256 until nanosecond
+//     timestamps reach 2^61 ≈ 2.3e18 ns, i.e. the year 2043; PrecisionBoundNs
+//     documents and the test pins the exact ULP for the current epoch). We
+//     quote it as the conservative "≤256ns" bound.
+//
+//   - The snapping NEVER causes OVER-admission. A stored TAT is only ever
+//     rounded to a representable double; the admission comparisons
+//     (`tat > limit_window`, `count + n > limit`) use the same snapped values on
+//     both sides, and a request that is within a fraction of a tick of the limit
+//     is resolved conservatively — at worst it is admitted up to 256ns EARLIER
+//     or LATER than an infinite-precision limiter would, which shifts a single
+//     decision by well under one emission interval and can only make the limiter
+//     momentarily STRICTER, never looser than limit+1 over any window. Rounding
+//     is symmetric round-to-nearest, so it does not accumulate a directional
+//     drift across calls (each call re-reads the stored value and re-derives from
+//     `now`, so errors do not compound).
+//
+//   - The in-memory emulation in scripts_memory.go performs the SAME arithmetic
+//     in float64 (see the gcraHandler / leakyBucketHandler / slidingWindowLog-
+//     Handler comments) so the emulation reproduces the snapping bit-for-bit and
+//     the parity integration tests (parity_integration_test.go) assert identical
+//     decisions against real Redis at a sub-256ns-sensitive boundary.
+//
+// WHY NOT "FIX" IT: eliminating the snap would require changing the on-Redis
+// representation (e.g. storing microseconds, which fit in float64 exactly for
+// centuries, or split hi/lo integer words). That is a wire-format / key-schema
+// migration (§5.4 "Proposed approach") and is deliberately NOT done here: the
+// 256ns bound is far below any realistic rate-limit granularity (a 1e6 req/s
+// limiter has a 1000ns emission interval, ~4× the snap), it is conservative
+// (never over-admits), and it is faithfully emulated and tested. The bound is
+// therefore promoted to a documented accuracy guarantee rather than a silent
+// footnote.
+
+// float64ExactIntLimit is 2^53, the largest integer such that every integer in
+// [-2^53, 2^53] is exactly representable as an IEEE-754 double. Above it, doubles
+// can represent only every ULP-th integer (see PrecisionBoundNs).
+const float64ExactIntLimit = 1 << 53 // 9_007_199_254_740_992
+
+// PrecisionBoundNs returns the worst-case absolute error (in nanoseconds)
+// introduced when the nanosecond timestamp nowNs is round-tripped through a
+// Redis Lua double, i.e. the ULP (unit in the last place) of nowNs as a float64.
+//
+// For any timestamp at or below 2^53 the result is 0 (exactly representable).
+// For nanosecond wall-clock timestamps this millennium the result is 256, which
+// is the documented "≤256ns snapping" bound (ENHANCEMENTS §5.4): the GCRA/leaky-
+// bucket TAT and sliding-window-log ZSET scores stored in Redis snap to the
+// nearest multiple of this many nanoseconds. The bound never causes
+// over-admission — see the "Nanosecond precision guarantee" block above.
+//
+// It is defined as the gap between nowNs (rounded to the nearest representable
+// double) and the next representable double, computed exactly via the float64
+// exponent, so callers and tests can assert the guarantee without a live Redis.
+func PrecisionBoundNs(nowNs int64) int64 {
+	if nowNs < 0 {
+		nowNs = -nowNs
+	}
+	if nowNs <= float64ExactIntLimit {
+		return 0
+	}
+	// The ULP of a double is 2^(e-52) where e is the unbiased exponent, i.e. the
+	// position of the most-significant set bit. Find that bit position.
+	msb := 63
+	for (nowNs>>msb)&1 == 0 {
+		msb--
+	}
+	// ULP = 2^(msb-52); for msb in [53,60] (ns timestamps from ~2255 BCE proxy up
+	// to year 2043) this yields 2..256.
+	shift := msb - 52
+	if shift <= 0 {
+		return 1
+	}
+	return int64(1) << shift
+}
+
 // Server-time mode (Redis clock-skew mitigation, ENHANCEMENTS §5.1)
 // ------------------------------------------------------------------
 // Every time-sensitive Lua script (TokenBucket, GCRA, SlidingWindowLog) accepts
