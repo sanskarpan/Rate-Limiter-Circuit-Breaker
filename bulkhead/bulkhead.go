@@ -213,7 +213,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 			// Slot acquired.
 		default:
 			b.reject()
-			return ErrBulkheadFull
+			return b.full()
 		}
 	} else {
 		// Blocking with timeout: race between slot available, context done,
@@ -241,7 +241,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 			b.waiting.Add(-1)
 			b.waitStats.observe(b.now().Sub(start))
 			b.reject()
-			return ErrBulkheadFull
+			return b.full()
 		}
 	}
 
@@ -261,6 +261,18 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 func (b *Bulkhead) reject() {
 	b.rejected.Add(1)
 	b.rec.IncBulkheadRejected(b.name)
+}
+
+// full builds the structured *BulkheadError describing this bulkhead's
+// saturation at the moment of rejection. It wraps ErrBulkheadFull, so callers
+// using errors.Is(err, ErrBulkheadFull) are unaffected.
+func (b *Bulkhead) full() error {
+	return &BulkheadError{
+		Name:     b.name,
+		Capacity: cap(b.sem),
+		Inflight: int(b.inflight.Load()),
+		Waiting:  int(b.waiting.Load()),
+	}
 }
 
 // Name returns the bulkhead's configured name (the metric "name" label).
