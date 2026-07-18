@@ -380,7 +380,15 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **References:** samber/mo, resilience4j `Supplier<T>`.
 
 ### 2.4 Framework middleware: chi, gin, echo, fiber, connect  
-> ✅ **Implemented & merged** (item 8)
+> ✅ **Implemented & merged** (item 8) — both **rate-limit** and **circuit-breaker**
+> adapters now ship in the `/contrib` module for chi, gin, echo, fiber and connect
+> (`contrib/{chimw,ginmw,echomw,fibermw,connectmw}` each expose `RateLimit(...)` and
+> `CircuitBreaker(...)`), each with race-tested end-to-end coverage against the real
+> framework router / connect RPC and `golangci-lint` clean. The circuit-breaker
+> adapters map framework-native failures to the breaker (HTTP 5xx or handler error →
+> failure; connect server-fault codes → failure, client-fault codes pass through) and
+> short-circuit with 503 / `CodeUnavailable` when open, honouring `WithCBSkipFunc` /
+> `WithCBOnOpen` (`WithCBFailureIf` for connect).
 - **Category:** API · **Priority:** P1 · **Effort:** M
 - **Rationale:** Middleware exists only for stdlib `net/http` (`ratelimit/middleware/http.go`,
   `circuitbreaker/middleware/http.go`) and gRPC. The majority of Go HTTP services use chi/gin/
