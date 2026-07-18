@@ -6,34 +6,44 @@ responsibly.
 
 ## Supported Versions
 
-This library has not yet had a tagged release; development happens on `main`
-toward an initial `0.1.0`. Until a stable release exists, security fixes are
-applied to the latest `main`.
+This project is **pre-1.0** (see [docs/STABILITY.md](docs/STABILITY.md)). Security
+fixes land on `main` and are shipped in the next `0.x` release. Only the latest
+released `0.x` minor line receives security fixes; there is no long-term support
+for older minor lines while the project is pre-1.0.
 
 | Version | Supported |
 | ------- | --------- |
-| `main` (unreleased, pre-`0.1.0`) | ✅ |
-| Tagged releases | ✅ latest minor once released |
+| `main` (development branch) | ✅ |
+| `v0.1.x` (latest released `0.x` minor) | ✅ |
+| Older `0.x` minor lines | ❌ (upgrade to the latest `0.x`) |
 
-This table will be updated as versions are tagged. Once `0.x`/`1.x` releases
-exist, only the latest released minor line will receive security fixes unless
-otherwise noted.
+This table will be updated as versions are tagged. Once a `1.0.0` release exists,
+the [SemVer](https://semver.org/) policy in [docs/STABILITY.md](docs/STABILITY.md)
+governs which release lines receive fixes.
 
 ## Reporting a Vulnerability
 
 **Please do not open a public issue for security vulnerabilities.**
 
-Report privately using one of the following, in order of preference:
+Report privately through **GitHub's private vulnerability reporting** (GitHub
+Security Advisories). This is the only supported channel — the project does not
+publish a monitored security email.
 
-1. **GitHub private security advisory** (preferred):
-   <https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/security/advisories/new>
-   This keeps the report confidential and lets us collaborate on a fix and CVE
-   if warranted.
+1. Go to the repository's **Security** tab:
+   <https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/security/advisories>
+2. Click **"Report a vulnerability"** (or use the direct link
+   <https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/security/advisories/new>).
+3. Fill in the advisory form with the details below.
 
-2. **Email:**
-   > **[PLACEHOLDER — maintainer to fill in]** Add a monitored security contact
-   > here, e.g. `security@your-domain.example`. Until one is configured, use the
-   > GitHub private advisory link above.
+Reports are delivered privately to the maintainer
+([`@sanskarpan`](https://github.com/sanskarpan)) and let us collaborate on a fix
+and request a CVE if warranted, without any public disclosure until a patch is
+ready.
+
+If you are unable to use GitHub Security Advisories, open a **minimal** public
+issue asking the maintainer to open a private advisory with you — do **not**
+include any exploit details, proof of concept, or reproduction steps in that
+public issue.
 
 Please include, where possible:
 
