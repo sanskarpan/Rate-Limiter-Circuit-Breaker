@@ -582,6 +582,69 @@ else
 end
 `
 
+// LeakyBucketScript atomically implements a distributed leaky bucket (ENHANCEMENTS
+// §1.8) using the leaky-bucket ⇄ GCRA duality (Stripe GCRA writeup). The queue is
+// modelled by a single stored TAT ("theoretical arrival time") nanosecond value:
+//
+//   - emission_interval_ns = 1e9 / leak_rate  → the constant spacing between two
+//     successive leaks (the time it takes the queue to drain one slot).
+//   - capacity                                → the queue depth (max backlog).
+//
+// A request for n slots is admitted iff the projected TAT does not run more than
+// capacity emission-intervals ahead of now — i.e. the virtual queue would not
+// exceed `capacity` pending slots. On admit the TAT advances by n intervals; on
+// deny the TAT is left unchanged (only SET on allow, matching GCRA). The returned
+// queue_depth is derived from how far the (post-admit) TAT leads now, so callers
+// get the same "queue depth / remaining" observability as the in-process
+// leakybucket.LeakyBucket.
+//
+// Keys: [tat_key]
+// Args: [emission_interval_ns, capacity, n, now_ns, ttl_ms, use_server_time (0/1)]
+// Returns: [allowed (1/0), queue_depth, retry_after_ns]
+//
+// use_server_time (ARGV[6], default "0"): when "1", `now` is overridden with the
+// Redis server clock via TIME (see the server-time preamble docs above) so app
+// clock skew across a fleet cannot corrupt the decision.
+const LeakyBucketScript = `
+local key = KEYS[1]
+local emission_interval = tonumber(ARGV[1])
+local capacity = tonumber(ARGV[2])
+local n = tonumber(ARGV[3])
+local now = tonumber(ARGV[4])
+local ttl_ms = tonumber(ARGV[5])
+local use_server_time = ARGV[6] or "0"
+pcall(function() redis.replicate_commands() end)
+if tostring(use_server_time) == "1" then
+    local t = redis.call("TIME")
+    now = (tonumber(t[1]) * 1000000 + tonumber(t[2])) * 1000
+end
+
+-- The stored TAT never trails now; a fresh key starts empty (queue empty).
+local stored_tat = tonumber(redis.call("GET", key)) or now
+local base = math.max(stored_tat, now)
+local new_tat = base + emission_interval * n
+-- The queue may hold at most 'capacity' slots: the TAT may lead now by at most
+-- capacity emission-intervals.
+local limit_window = now + emission_interval * capacity
+
+if new_tat > limit_window then
+    -- Queue full: report how long until one slot drains (retry_after) and the
+    -- current backlog depth (before this rejected request).
+    local retry_after = new_tat - limit_window
+    local depth = math.floor((base - now) / emission_interval)
+    if depth < 0 then depth = 0 end
+    if depth > capacity then depth = capacity end
+    return {0, depth, retry_after}
+else
+    redis.call("SET", key, new_tat, "PX", ttl_ms)
+    -- Post-admit backlog depth = how far the new TAT leads now, in slots.
+    local depth = math.floor((new_tat - now) / emission_interval)
+    if depth < 0 then depth = 0 end
+    if depth > capacity then depth = capacity end
+    return {1, depth, 0}
+end
+`
+
 // SlidingWindowCounterScript atomically reads the current+previous fixed-window
 // counters, estimates the sliding count, checks it against the limit, and only
 // increments the current window if the request fits. This replaces the racy
