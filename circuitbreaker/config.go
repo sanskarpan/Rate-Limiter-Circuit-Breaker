@@ -57,6 +57,16 @@ type Config struct {
 	// Default: 1.
 	SuccessThreshold int
 
+	// HalfOpenStrategy selects how concurrent probe admission is paced while the
+	// circuit is half-open. A nil value (the default) uses FixedProbeStrategy,
+	// which admits up to HalfOpenMaxRequests concurrent probes at all times and
+	// preserves the legacy behavior exactly. Use RampProbeStrategy for a
+	// gradual-ramp / probe-budget scheme that admits an increasing amount of
+	// traffic as consecutive probes succeed. The returned allowance is always
+	// clamped to HalfOpenMaxRequests; the circuit still closes on
+	// SuccessThreshold consecutive successes regardless of strategy.
+	HalfOpenStrategy HalfOpenStrategy
+
 	// --- Request handling ---
 
 	// RequestTimeout limits how long a single Execute() call can take.
