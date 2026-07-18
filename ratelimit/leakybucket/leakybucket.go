@@ -46,13 +46,60 @@ type token struct {
 	ctx    context.Context //nolint:containedctx
 }
 
-// keyQueue holds per-key state: a buffered channel of pending tokens.
+// keyQueue holds per-key state: a buffered channel of pending tokens plus an
+// optional priority heap of waiters (see priority.go). The channel is the
+// default FIFO path; the heap is allocated lazily on the first priority waiter.
 type keyQueue struct {
 	ch         chan token
 	capacity   int
 	leakRate   float64 // requests per second
 	lastAccess time.Time
 	mu         sync.Mutex
+
+	// pq is the per-key priority heap of waiters, nil until the first priority
+	// waiter arrives. All access is serialized under mu. nextSeq is a per-key
+	// arrival counter used as a FIFO tie-breaker within a priority level.
+	pq      *priorityQueue
+	nextSeq uint64
+}
+
+// depthLocked returns the current queue depth (channel + priority heap). Callers
+// must hold q.mu.
+func (q *keyQueue) depthLocked() int {
+	d := len(q.ch)
+	if q.pq != nil {
+		d += q.pq.Len()
+	}
+	return d
+}
+
+// ensurePQ lazily allocates the priority heap. Callers must hold q.mu.
+func (q *keyQueue) ensurePQ() {
+	if q.pq == nil {
+		pq := make(priorityQueue, 0, 4)
+		q.pq = &pq
+	}
+}
+
+// popReadyPriorityLocked pops and returns the highest-priority waiter whose
+// context is still live, discarding any cancelled waiters it encounters along
+// the way (they are denied by the caller's own cancellation path, so here they
+// are simply dropped). Returns nil when the heap has no live waiter. Callers
+// must hold q.mu.
+func (q *keyQueue) popReadyPriorityLocked() *pqToken {
+	if q.pq == nil {
+		return nil
+	}
+	for q.pq.Len() > 0 {
+		t := heapPop(q.pq)
+		if t.ctx.Err() != nil {
+			// Cancelled while queued: its own AllowP cancellation branch will (or
+			// already did) return a denial; drop it without consuming a leak slot.
+			continue
+		}
+		return t
+	}
+	return nil
 }
 
 // LeakyBucket implements the Limiter interface using the leaky bucket algorithm.
@@ -156,8 +203,8 @@ func (lb *LeakyBucket) allow1(ctx context.Context, key string) ratelimit.Result 
 	// q.ch, so serializing them guarantees the queue never exceeds capacity and
 	// AllowN's capacity check cannot be invalidated by a concurrent Allow.
 	q.mu.Lock()
-	if len(q.ch) >= lb.capacity {
-		qDepth := len(q.ch)
+	if q.depthLocked() >= lb.capacity {
+		qDepth := q.depthLocked()
 		q.mu.Unlock()
 		retryAfter := time.Duration(float64(qDepth+1) / lb.leakRate * float64(time.Second))
 		return ratelimit.Result{
@@ -236,8 +283,8 @@ func (lb *LeakyBucket) AllowN(ctx context.Context, key string, n int) (res ratel
 	// ever succeed when there is genuine free space), so holding q.mu here means
 	// no interleaved AllowN can consume the slots we just verified.
 	q.mu.Lock()
-	if lb.capacity-len(q.ch) < n {
-		qDepth := len(q.ch)
+	if lb.capacity-q.depthLocked() < n {
+		qDepth := q.depthLocked()
 		q.mu.Unlock()
 		retryAfter := time.Duration(float64(qDepth+1) / lb.leakRate * float64(time.Second))
 		return ratelimit.Result{
@@ -403,9 +450,15 @@ func (lb *LeakyBucket) WaitN(ctx context.Context, key string, n int) error {
 }
 
 // Peek returns current state without consuming a slot.
+//
+// queue_depth counts both the FIFO channel and the priority heap (see
+// priority.go), so it reflects the true backlog under a mix of Allow and AllowP
+// waiters. It remains an advisory point-in-time snapshot per the package caveats.
 func (lb *LeakyBucket) Peek(_ context.Context, key string) ratelimit.State {
 	q := lb.getOrCreate(key)
-	qDepth := len(q.ch)
+	q.mu.Lock()
+	qDepth := q.depthLocked()
+	q.mu.Unlock()
 	remaining := lb.capacity - qDepth
 	if remaining < 0 {
 		remaining = 0
@@ -446,6 +499,7 @@ func (lb *LeakyBucket) Reset(_ context.Context, key string) error {
 			}
 		}
 	drained:
+		lb.drainPriority(q)
 		delete(lb.queues, key)
 	}
 	return nil
@@ -515,6 +569,36 @@ func (lb *LeakyBucket) leaker(key string, q *keyQueue) {
 			lb.drainQueue(q)
 			return
 		case <-ticker.C():
+			// Priority-first: a live priority-heap waiter (see priority.go) is
+			// served before the FIFO channel. Only when the heap has no live
+			// waiter does this tick fall back to the channel, so the default
+			// (channel-only) path is unchanged. Exactly one token is served per
+			// tick either way, preserving the constant leak rate.
+			q.mu.Lock()
+			q.lastAccess = lb.clock.Now()
+			pt := q.popReadyPriorityLocked()
+			if pt != nil {
+				remaining := lb.capacity - q.depthLocked() - 1
+				q.mu.Unlock()
+				if remaining < 0 {
+					remaining = 0
+				}
+				pt.result <- ratelimit.Result{
+					Allowed:   true,
+					Limit:     lb.capacity,
+					Remaining: remaining,
+					Algorithm: algorithmName,
+				}
+				lb.mu.RLock()
+				_, exists := lb.queues[key]
+				lb.mu.RUnlock()
+				if !exists {
+					return
+				}
+				continue
+			}
+			q.mu.Unlock()
+
 			select {
 			case t := <-q.ch:
 				// Update last access
@@ -558,7 +642,8 @@ func (lb *LeakyBucket) leaker(key string, q *keyQueue) {
 	}
 }
 
-// drainQueue denies all pending requests in a queue.
+// drainQueue denies all pending requests in a queue (both the FIFO channel and
+// the priority heap).
 func (lb *LeakyBucket) drainQueue(q *keyQueue) {
 	for {
 		select {
@@ -570,7 +655,32 @@ func (lb *LeakyBucket) drainQueue(q *keyQueue) {
 				Algorithm: algorithmName,
 			}
 		default:
+			lb.drainPriority(q)
 			return
+		}
+	}
+}
+
+// drainPriority denies and clears every waiter currently parked in the key's
+// priority heap. Safe to call with q.mu unheld (it takes the lock itself); the
+// per-token result channels are buffered so the sends never block.
+func (lb *LeakyBucket) drainPriority(q *keyQueue) {
+	q.mu.Lock()
+	if q.pq == nil || q.pq.Len() == 0 {
+		q.mu.Unlock()
+		return
+	}
+	pending := make([]*pqToken, 0, q.pq.Len())
+	for q.pq.Len() > 0 {
+		pending = append(pending, heapPop(q.pq))
+	}
+	q.mu.Unlock()
+	for _, t := range pending {
+		t.result <- ratelimit.Result{
+			Allowed:   false,
+			Limit:     lb.capacity,
+			Remaining: 0,
+			Algorithm: algorithmName,
 		}
 	}
 }
@@ -601,7 +711,7 @@ func (lb *LeakyBucket) cleanupLoop() {
 			lb.mu.Lock()
 			for k, q := range lb.queues {
 				q.mu.Lock()
-				idle := q.lastAccess.Before(cutoff) && len(q.ch) == 0
+				idle := q.lastAccess.Before(cutoff) && q.depthLocked() == 0
 				q.mu.Unlock()
 				if idle {
 					delete(lb.queues, k)

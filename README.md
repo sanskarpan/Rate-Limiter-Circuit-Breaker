@@ -28,6 +28,75 @@ or going from single-instance to distributed is a one-line change.
 
 ---
 
+## How this compares to other Go libraries
+
+Most Go resilience tooling is **single-purpose**: `x/time/rate` and
+`uber-go/ratelimit` do one rate-limiting algorithm each; `sony/gobreaker` and
+`mercari/go-circuitbreaker` do circuit breaking. This library instead ships a
+*suite* of rate-limiting algorithms **plus** circuit breaker, bulkhead, retry
+(with a retry budget), timeout, and fallback/hedge — all composable through one
+pipeline, with an optional Redis backend for distributed limiting.
+
+**Choose this library if** you want more than one rate-limiting algorithm behind
+a single interface, need distributed limiting *and* circuit breaking *and* a
+composable pipeline from one dependency, and value a zero-dependency core.
+**Choose a single-purpose library if** you only need exactly one primitive and
+want the smallest possible import (e.g. just `x/time/rate` for a token bucket, or
+just `gobreaker` for a breaker).
+
+| Capability | **This library** | `x/time/rate` | `uber-go/ratelimit` | `sony/gobreaker` | `mercari/go-circuitbreaker` | `ulule/limiter` | `didip/tollbooth` | resilience4j *(JVM ref)* |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Token bucket | ✅ | ✅ | — | — | — | — | ✅¹ | ✅ |
+| GCRA | ✅ | — | — | — | — | — | — | — |
+| Sliding window (log + counter) | ✅ | — | — | — | — | ✅² | — | — |
+| Leaky bucket | ✅ | — | ✅ | — | — | — | — | — |
+| Fixed window | ✅ | — | — | — | — | ✅ | — | — |
+| Adaptive limiter | ✅ | — | — | — | — | — | — | — |
+| Concurrency limiter | ✅ | — | — | — | — | — | — | ✅ (Bulkhead) |
+| Load shedder | ✅ | — | — | — | — | — | — | — |
+| Circuit breaker | ✅ | — | — | ✅ | ✅ | — | — | ✅ |
+| Bulkhead | ✅ | — | — | — | — | — | — | ✅ |
+| Retry + retry budget | ✅ | — | — | — | — | — | — | ✅³ |
+| Timeout / fallback / hedge | ✅ | — | — | — | — | — | — | ✅⁴ |
+| Composable pipeline | ✅ | — | — | — | — | — | — | ✅ (decorators) |
+| Distributed (Redis) | ✅⁵ | — | — | — | — | ✅ | — | — |
+| Framework middleware | ✅⁶ | — | — | — | — | ✅ | ✅ (net/http) | ✅ (Spring) |
+| Metrics (Prometheus / OTel) | ✅⁷ | — | — | — | — | — | — | ✅ (Micrometer) |
+| Zero-dependency core | ✅ | ✅⁸ | ✅ | ✅ | — | — | — | n/a |
+| Language | Go | Go | Go | Go | Go | Go | Go | JVM |
+
+Legend: **✅** = supported · **—** = not provided / not applicable. Competitor
+entries reflect each project's documented capabilities; where a feature isn't a
+stated capability we use "—" rather than assert its absence.
+
+Footnotes:
+
+1. `didip/tollbooth` builds its limiter on `golang.org/x/time/rate` (token bucket).
+2. `ulule/limiter` implements a fixed-window counter and a sliding-window
+   approximation; it does not ship a token bucket or GCRA.
+3. resilience4j retry supports max-attempts/backoff; a dedicated *retry budget*
+   (token-bucket guard against retry storms) is provided here as `retry.Budget`.
+4. resilience4j offers `TimeLimiter` and fallback via decorators; N-copy hedging
+   is provided here in the `fallback` package.
+5. Distributed backends via atomic Redis Lua scripts for token bucket, GCRA,
+   fixed window, and both sliding-window variants (`ratelimit/store/redis.go`,
+   `ratelimit/*/distributed*.go`). Leaky bucket and adaptive are node-local.
+6. Rate-limit and circuit-breaker middleware for stdlib `net/http` and gRPC in
+   the core repo, plus chi/gin/echo/fiber/connect adapters in the separate
+   `contrib/` module (kept out of the core to preserve zero deps).
+7. Metrics via a pluggable `metric.Recorder` with Prometheus (`metric/prometheus`)
+   and OpenTelemetry (`observability/otel`) adapters; the core stays no-op and
+   dependency-free by default.
+8. `golang.org/x/time/rate` lives in the `golang.org/x` extended standard library
+   (a Go-team-maintained module, not the compiled-in stdlib).
+
+Per-algorithm trade-offs (not library positioning) are in
+[docs/comparison.md](docs/comparison.md); migration guides from `x/time/rate` and
+`gobreaker` are in [docs/migration.md](docs/migration.md); published
+microbenchmarks are in [docs/benchmarks.md](docs/benchmarks.md).
+
+---
+
 ## Features
 
 | Package | What it does | Key property |
@@ -396,6 +465,8 @@ docker-compose up    # demo server + Redis + Prometheus + Grafana
 - [docs/algorithms.md](docs/algorithms.md) — per-algorithm theory, formulas, and properties
 - [docs/comparison.md](docs/comparison.md) — trade-offs and a decision guide
 - [docs/distributed.md](docs/distributed.md) — Redis-backed limiters, fallback modes, cluster notes
+- [docs/benchmarks.md](docs/benchmarks.md) — reproducible microbenchmarks (real ns/op, B/op, allocs/op)
+- [docs/good-first-issues.md](docs/good-first-issues.md) — scoped starter tasks for new contributors
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development setup and contribution guidelines
 - [SECURITY.md](SECURITY.md) — reporting security issues
 - [CHANGELOG.md](CHANGELOG.md) — release history

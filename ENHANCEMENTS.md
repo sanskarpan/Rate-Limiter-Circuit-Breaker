@@ -251,7 +251,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   script per check to avoid partial consumption; start with local-only.
 - **References:** Cloudflare tiered limits, Kong/Envoy multi-descriptor rate limiting.
 
-### 1.7 Priority queue for `Wait`/leaky bucket
+### 1.7 Priority queue for `Wait`/leaky bucket  
+> ✅ **Implemented & merged** — `leakybucket.AllowP`/`WaitP(ctx, key, priority)` backed by a per-key max-heap of waiters (priority desc, FIFO within a level); cancelled waiters self-remove; default `Wait`/`Allow` path unchanged (zero-overhead).
 - **Category:** Algorithms · **Priority:** P3 · **Effort:** M
 - **Rationale:** Under contention, high-priority callers should acquire tokens/slots first.
 - **What exists today:** `Wait`/`WaitN` and the leaky bucket queue are FIFO
@@ -262,7 +263,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   a channel — keep it opt-in.
 - **References:** Java `PriorityBlockingQueue`, WFQ scheduling.
 
-### 1.8 Distributed leaky bucket & adaptive limiter
+### 1.8 Distributed leaky bucket & adaptive limiter  
+> ✅ **Implemented & merged** — `leakybucket.NewDistributed` (store-backed `LeakyBucketScript` Lua + in-memory emulation, server-clock TIME, fail-open); the adaptive limiter is documented as intentionally node-local (its signals are per-instance) with guidance on composing it with a distributed limiter.
 - **Category:** Algorithms / Distributed · **Priority:** P2 · **Effort:** M
 - **Rationale:** Five of eight algorithms have Redis backends (TB, GCRA, FW, SWL, SWC), but
   **leaky bucket and adaptive do not** (`leakybucket/` and `adaptive/` have no `distributed.go`).
@@ -431,7 +433,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   `Is` target.
 - **References:** `ratelimit/errors.go` (as the internal template), resilience4j exceptions.
 
-### 2.6 Interface segregation: a read-only `Peeker` / `Observer`
+### 2.6 Interface segregation: a read-only `Peeker` / `Observer`  
+> ✅ **Implemented & merged** — `ratelimit.Peeker` / `ratelimit.Observer` read-only interfaces (in `ratelimit/observer.go`), satisfied automatically by every concrete limiter (compile-time assertions in tests).
 - **Category:** API · **Priority:** P3 · **Effort:** S
 - **Rationale:** The `Limiter` interface bundles mutating (`Allow`, `Reset`) and read-only
   (`Peek`) methods (`ratelimit/limiter.go:23-45`). Dashboards/exporters that only observe are
@@ -454,7 +457,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** Presets can mislead; document clearly.
 - **References:** stdlib `http.Server{}` zero-value usability.
 
-### 2.8 Context-based cost & priority propagation helpers
+### 2.8 Context-based cost & priority propagation helpers  
+> ✅ **Implemented & merged** — `ratelimit/ratelimitctx`: `WithCost`/`CostFromContext`/`CostOrDefault`, `WithPriority`/`PriorityFromContext`/`PriorityOrDefault`, and `CostFuncFromContext`/`GRPCCostFuncFromContext` adapters (unexported context keys).
 - **Category:** API · **Priority:** P2 · **Effort:** S
 - **Rationale:** §1.5 (cost) and §1.7/§1.2 (priority) both need a call-site convention.
   Provide typed context helpers so middleware and pipeline stages share one vocabulary.
@@ -594,7 +598,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** None significant; mostly a correctness/consistency fix.
 - **References:** Grafana dashboard-as-code, promtool.
 
-### 4.4 Structured-logging hooks for library consumers
+### 4.4 Structured-logging hooks for library consumers  
+> ✅ **Implemented & merged** — `logging` package (stdlib `log/slog` only): `NewRecorder(*slog.Logger)` returns a `metric.Recorder` that emits structured logs, and `NewCircuitBreakerHooks` returns callbacks matching `circuitbreaker.Config`.
 - **Category:** Observability · **Priority:** P2 · **Effort:** S
 - **Rationale:** `server/logger/logger.go` is `slog`-based but **server-internal only**; the
   library packages have no logging integration. Consumers want to plug their own `slog.Logger`
@@ -630,7 +635,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   the new Recorder (§4.1).
 - **References:** Hystrix bulkhead metrics, resilience4j bulkhead.
 
-### 4.7 Event-stream abstraction for the playground and consumers
+### 4.7 Event-stream abstraction for the playground and consumers  
+> ✅ **Implemented & merged** — `eventstream` package: generic `Broker[T]` with `Subscribe`/`Unsubscribe`/`Publish`/`Close`, non-blocking fan-out with per-subscriber buffers and slow-consumer drop accounting.
 - **Category:** Observability · **Priority:** P3 · **Effort:** M
 - **Rationale:** The demo streams `rate_limit_result` / `cb_state_change` / `sim_stats` over
   WebSockets from the *server* (`server/api/hub.go`), reimplementing what a library-level event
@@ -936,7 +942,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   live playground visualizations.
 - **References:** Starlight, Docusaurus.
 
-### 8.4 Published head-to-head benchmarks
+### 8.4 Published head-to-head benchmarks  
+> ✅ **Implemented & merged** — `docs/benchmarks.md`: real median-of-3 benchmark tables (env-stamped) for token bucket / GCRA / fixed & sliding window / leaky bucket / circuit breaker, with methodology, reproduce commands, and an honest coverage-gap list.
 - **Category:** Docs / Community · **Priority:** P1 · **Effort:** M
 - **Rationale:** The CHANGELOG cites internal ns/op numbers, but there are **no published
   comparisons** vs `x/time/rate`, `uber/ratelimit`, `gobreaker`. Benchmarks are the most
@@ -1112,7 +1119,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 11. Community & Adoption
 
-### 11.1 Library-vs-alternatives comparison table in the README
+### 11.1 Library-vs-alternatives comparison table in the README  
+> ✅ **Implemented & merged** — README comparison table vs x/time/rate, uber-go/ratelimit, gobreaker, go-circuitbreaker, ulule/limiter, tollbooth (+ resilience4j reference); every ✅ for this library verified against the code.
 - **Category:** Community · **Priority:** P1 · **Effort:** S
 - **Rationale:** The README compares *algorithms* internally but never positions the library vs
   `x/time/rate` / `uber/ratelimit` / `gobreaker` / `slok/goresilience` / `resilience4j`. New
@@ -1123,7 +1131,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   pipeline in one? adaptive? observability?) high in the README.
 - **References:** how zap/zerolog position vs each other.
 
-### 11.2 Good-first-issue set & contributor on-ramp
+### 11.2 Good-first-issue set & contributor on-ramp  
+> ✅ **Implemented & merged** — `docs/good-first-issues.md` (12 scoped starter tasks from remaining roadmap items) + a Contributor on-ramp section in CONTRIBUTING.md.
 - **Category:** Community · **Priority:** P2 · **Effort:** S
 - **Rationale:** `CONTRIBUTING.md`, issue templates, and PR template exist, but there's no
   curated `good first issue` backlog. Many items in this roadmap (framework middleware §2.4,

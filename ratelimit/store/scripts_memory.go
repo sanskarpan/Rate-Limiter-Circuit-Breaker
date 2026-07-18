@@ -25,6 +25,7 @@ import (
 func RegisterDefaultScripts(m *Memory) {
 	m.RegisterScript(TokenBucketScript, m.tokenBucketHandler)
 	m.RegisterScript(GCRAScript, m.gcraHandler)
+	m.RegisterScript(LeakyBucketScript, m.leakyBucketHandler)
 	m.RegisterScript(SlidingWindowLogScript, m.slidingWindowLogHandler)
 	m.RegisterScript(SlidingWindowCounterScript, m.slidingWindowCounterHandler)
 	m.RegisterScript(FixedWindowScript, m.fixedWindowHandler)
@@ -303,6 +304,97 @@ func (m *Memory) gcraHandler(keys []string, args []any) (any, error) {
 	e.value = strconv.FormatInt(int64(tatF), 10)
 	m.setEntryTTLmsAbs(e, ttlMs)
 	return []any{int64(1), int64(0)}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Leaky bucket emulation (mirrors LeakyBucketScript)
+// ---------------------------------------------------------------------------
+//
+// State per key is the TAT as a nanosecond integer string (identical storage to
+// GCRA). This emulation mirrors LeakyBucketScript EXACTLY, including doing the
+// arithmetic in float64 so it reproduces Redis's Lua double-precision snapping
+// (~256ns granularity above 2^53), keeping the memory-store tests faithful to
+// the real script (F-1 discipline, as for GCRA).
+//
+// Args: [emission_interval_ns(int), capacity(int), n(int), now_ns(int), ttl_ms(int), use_server_time(0/1)]
+// Returns: []any{allowed int64, queue_depth int64, retry_after_ns int64}.
+func (m *Memory) leakyBucketHandler(keys []string, args []any) (any, error) {
+	if len(keys) < 1 {
+		return nil, fmt.Errorf("leakyBucketHandler: missing key")
+	}
+	if len(args) < 5 {
+		return nil, fmt.Errorf("leakyBucketHandler: expected >=5 args, got %d", len(args))
+	}
+	emission, err := toInt64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	capacity, err := toInt64(args[1])
+	if err != nil {
+		return nil, err
+	}
+	n, err := toInt64(args[2])
+	if err != nil {
+		return nil, err
+	}
+	now, err := toInt64(args[3])
+	if err != nil {
+		return nil, err
+	}
+	ttlMs, err := toInt64(args[4])
+	if err != nil {
+		return nil, err
+	}
+	// Server-time mode: substitute the store's own clock for the client `now`
+	// (mirrors the Lua TIME override guarded by use_server_time, ARGV[6], idx 5).
+	if srv, ok := m.memoryServerNowNs(serverTimeFlag(args, 5)); ok {
+		now = srv
+	}
+
+	key := keys[0]
+	e, err := m.loadOrCreateRaw(key)
+	if err != nil {
+		return nil, err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// float64 arithmetic to match the Lua double-precision behaviour (see GCRA).
+	nowF := float64(now)
+	storedF := nowF
+	if e.value != "" {
+		if v, err := strconv.ParseInt(e.value, 10, 64); err == nil {
+			storedF = float64(v)
+		}
+	}
+	baseF := storedF
+	if nowF > baseF {
+		baseF = nowF
+	}
+	newTatF := baseF + float64(emission)*float64(n)
+	limitWindowF := nowF + float64(emission)*float64(capacity)
+
+	clampDepth := func(d float64) int64 {
+		di := int64(math.Floor(d))
+		if di < 0 {
+			di = 0
+		}
+		if di > capacity {
+			di = capacity
+		}
+		return di
+	}
+
+	if newTatF > limitWindowF {
+		// Queue full: do NOT persist the tentative TAT (matches Lua: only SET on allow).
+		retryAfter := int64(newTatF - limitWindowF)
+		depth := clampDepth((baseF - nowF) / float64(emission))
+		return []any{int64(0), depth, retryAfter}, nil
+	}
+	e.value = strconv.FormatInt(int64(newTatF), 10)
+	m.setEntryTTLmsAbs(e, ttlMs)
+	depth := clampDepth((newTatF - nowF) / float64(emission))
+	return []any{int64(1), depth, int64(0)}, nil
 }
 
 // ---------------------------------------------------------------------------

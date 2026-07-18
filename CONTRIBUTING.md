@@ -9,6 +9,7 @@ you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Table of contents
 
+- [Contributor on-ramp](#contributor-on-ramp)
 - [Prerequisites](#prerequisites)
 - [Development workflow](#development-workflow)
 - [Building and testing](#building-and-testing)
@@ -18,6 +19,59 @@ you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 - [The zero-dependency rule](#the-zero-dependency-rule)
 - [Commit messages](#commit-messages)
 - [Pull requests](#pull-requests)
+
+## Contributor on-ramp
+
+New to the project? Here is the fast path from clone to merged PR.
+
+**1. Set up your environment**
+
+```bash
+git clone https://github.com/<you>/Rate-Limiter-Circuit-Breaker.git
+cd Rate-Limiter-Circuit-Breaker
+make help          # list every Makefile target
+make test          # unit tests + coverage — confirms the toolchain works
+```
+
+Key Makefile targets you'll use most:
+
+| Target | When |
+| --- | --- |
+| `make test-race` | **Before every PR** — race detector, `-count=3`. |
+| `make lint` | `golangci-lint run` — must be clean. |
+| `make verify-deps` | Enforces the zero-dependency rule (below). |
+| `make bench` / `make bench-ci` | Run benchmarks (see [docs/benchmarks.md](docs/benchmarks.md)). |
+| `make test-integration` | Redis-backed distributed tests (needs Docker). |
+
+**2. Know the one rule that will fail your PR if broken**
+
+The **[zero-dependency rule](#the-zero-dependency-rule)**: core algorithm
+packages import only the standard library and other core packages. Third-party
+imports belong in adapter packages (`contrib/`, `ratelimit/store`,
+`ratelimit/middleware`, `observability/`, `metric/`) or test files. `make
+verify-deps` enforces this in CI.
+
+**3. Pick something to work on**
+
+- Browse [docs/good-first-issues.md](docs/good-first-issues.md) — 12 scoped
+  starter tasks with files and acceptance criteria, each drawn from an unchecked
+  item in [ENHANCEMENTS.md](ENHANCEMENTS.md).
+- Comment on the tracking issue to claim it before you start.
+
+**4. Pre-PR checklist**
+
+Run these three and make sure they pass before opening a PR:
+
+```bash
+make test-race      # go test -race -count=3 ./...
+golangci-lint run   # or: make lint
+make verify-deps    # core packages must stay dependency-free
+```
+
+Then: add/update tests for any behaviour change, update godoc for exported
+symbols, add a `## [Unreleased]` note to [CHANGELOG.md](CHANGELOG.md) for
+user-facing changes, and fill out the [PR template](.github/PULL_REQUEST_TEMPLATE.md).
+See [Pull requests](#pull-requests) for the full list.
 
 ## Prerequisites
 
