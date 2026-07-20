@@ -1103,7 +1103,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   the WS stream.
 - **References:** the existing Recharts setup, observable-style algorithm animations.
 
-### 10.3 Split the demo server from the library (repo/module hygiene)
+### 10.3 Split the demo server from the library (repo/module hygiene)  
+> ✅ **Implemented & merged** — `server/` is now its own nested module (`server/go.mod` with `replace ../`), dropping `gorilla/websocket` from the root library module's dependency graph; goreleaser (`dir: server`), Dockerfile, Makefile and CI all build/test the server module, and the remaining root direct deps are only the opt-in adapter deps (prometheus/otel/redis/grpc).
 - **Category:** Frontend / DX · **Priority:** P2 · **Effort:** M
 - **Rationale:** The demo server (`server/`) and frontend live in the library repo. While the
   frontend is already separable (talks over REST/WS) and the core enforces zero deps, the
@@ -1118,7 +1119,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   value of a truly dependency-free library module.
 - **References:** Go multi-module repos, k8s `staging/` pattern.
 
-### 10.4 Frontend Vercel deploy + preview environments
+### 10.4 Frontend Vercel deploy + preview environments  
+> ✅ **Implemented & merged** — `frontend/vercel.json` (framework + security headers + main-branch production gate) and `docs/deploy-frontend.md` documenting the Vercel Git integration that gives automatic per-PR preview environments, env-var wiring, and an optional CI-driven deploy path.
 - **Category:** Frontend / Release · **Priority:** P3 · **Effort:** S
 - **Rationale:** `next.config.ts` uses `output: "standalone"` (Docker-ready) but there's **no
   `vercel.json`** and no deployed public playground — a live demo is a huge adoption driver.
