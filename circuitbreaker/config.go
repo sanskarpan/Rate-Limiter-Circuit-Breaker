@@ -8,6 +8,13 @@ import (
 )
 
 // Config configures a CircuitBreaker.
+//
+// Zero value: the zero Config is valid. circuitbreaker.New(Config{}) returns a
+// working count-based breaker; every unset field is normalised to its documented
+// default by New (WindowType→CountBased, WindowSize 10, FailureThreshold 5,
+// OpenTimeout 30s, HalfOpenMaxRequests 1, SuccessThreshold 1, Clock RealClock,
+// Recorder metric.Default(), IsFailure = "all non-nil errors fail"). Set only the
+// fields you want to override.
 type Config struct {
 	// Name is a human-readable identifier for this circuit breaker.
 	Name string
