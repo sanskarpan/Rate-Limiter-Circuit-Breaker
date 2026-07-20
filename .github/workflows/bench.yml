@@ -119,7 +119,7 @@ jobs:
 
       - name: Post benchstat comment (PRs only)
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: benchmark-regression
           path: comment.md
@@ -169,7 +169,7 @@ jobs:
 
       - name: Upload benchmark artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmarks
           path: |
