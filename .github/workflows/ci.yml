@@ -68,8 +68,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Build demo server
-        run: CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/demo-server ./server/
+      - name: Build demo server (nested server/ module)
+        working-directory: server
+        run: CGO_ENABLED=0 go build -ldflags="-s -w" -o ../bin/demo-server .
 
       - name: Build examples
         run: go build ./examples/...
@@ -218,9 +219,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       # ── Build & start the Go demo server on :8080 ──────────────────────────
-      - name: Build demo server
-        working-directory: .
-        run: CGO_ENABLED=0 go build -o bin/demo-server ./server/
+      # The demo server is its own nested module; build it from server/ so the
+      # replace directive resolves the library at ../. Output to repo-root bin/.
+      - name: Build demo server (nested server/ module)
+        working-directory: server
+        run: CGO_ENABLED=0 go build -o ../bin/demo-server .
 
       - name: Start demo server (background)
         working-directory: .
@@ -349,3 +352,26 @@ jobs:
           go build ./...
           go vet ./...
           go test -race ./...
+
+  # ─── Server module (demo server) ────────────────────────────────────────────
+  # The demo server lives in its own nested Go module (server/) so the root
+  # library module's dependency graph stays lean (no gorilla/websocket, etc.).
+  # The root `test` job runs `go test ./...` which no longer covers server/, so
+  # the server module gets its own build/vet/test job here.
+  server-mod:
+    name: Server (demo server module)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build, vet & test the server module
+        working-directory: server
+        run: |
+          go build ./...
+          go vet ./...
+          go test -race -count=1 -timeout=5m ./...

@@ -26,7 +26,13 @@ jobs:
           go-version: "1.25"
           cache: true
 
-      - name: Run tests
+      - name: Run tests (root library module)
+        run: go test -race -count=1 ./...
+
+      # The demo server (what this release actually ships) is a nested module,
+      # no longer covered by the root `./...` above — gate on it too.
+      - name: Run tests (demo server module)
+        working-directory: server
         run: go test -race -count=1 ./...
 
   # ─── Build, sign, publish via goreleaser ────────────────────────────────────

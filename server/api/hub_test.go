@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
-	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/testutil"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/internal/testutil"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )

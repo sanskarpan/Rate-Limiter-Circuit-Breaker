@@ -413,6 +413,25 @@ The repository ships a demo server (Go) and a Next.js frontend that visualize
 each algorithm in real time. **These are demos, not part of the importable
 library.**
 
+#### Module topology
+
+The repo is a multi-module workspace so that heavy or optional dependencies never
+leak into the importable library:
+
+| Module | Path | Purpose | Notable deps |
+|--------|------|---------|--------------|
+| **root (library)** | `.` | The importable resilience toolkit (rate limiters, circuit breaker, pipeline, adapters) | Only optional adapter deps — Redis (`ratelimit/store`), Prometheus (`metric/prometheus`), OpenTelemetry (`observability/otel`), gRPC (`ratelimit/middleware` gRPC). The **algorithm core is zero-dependency** (enforced by `make verify-deps`). |
+| `contrib` | `contrib/` | chi / gin / echo / fiber / connect middleware adapters | The web-framework SDKs |
+| `stores` | `stores/` | Extra distributed backends (Memcached, DynamoDB) | AWS SDK, gomemcache |
+| `server` | `server/` | The **demo server** (HTTP API + WebSocket hub driving the frontend) | `gorilla/websocket`, `prometheus/client_golang` |
+
+Each nested module uses `replace github.com/sanskarpan/Rate-Limiter-Circuit-Breaker => ../`
+to build against the in-tree library.
+
+Splitting the demo server into its own `server/` module is what keeps
+`github.com/gorilla/websocket` (used only by the server's WebSocket hub) out of the
+library's dependency graph entirely — a plain `go get` of the library pulls none of it.
+
 ### Installing the demo server
 
 The demo server is a standalone binary. Pick whichever is convenient:
@@ -438,8 +457,9 @@ every [GitHub release](https://github.com/sanskarpan/Rate-Limiter-Circuit-Breake
 ### Server
 
 ```bash
-# From the repo root — listens on :8080 by default.
-go run ./server
+# The demo server is its own nested Go module — run it from server/.
+# Listens on :8080 by default.
+cd server && go run .
 ```
 
 Configuration via environment variables:
