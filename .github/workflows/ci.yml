@@ -330,3 +330,22 @@ jobs:
           go build ./...
           go vet ./...
           go test -race ./...
+
+  # ─── Stores module (additional distributed backends) ────────────────────────
+  stores:
+    name: Stores (memcached, dynamodb backends)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build, vet & test the stores module
+        working-directory: stores
+        run: |
+          go build ./...
+          go vet ./...
+          go test -race ./...
