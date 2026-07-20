@@ -1,0 +1,46 @@
+# go-gremlins mutation-testing configuration (ENHANCEMENTS §6.6).
+#
+# Invoked via `make mutation`, which runs gremlins through `go run` so NO
+# dependency is added to the core go.mod/go.sum. See docs/mutation-testing.md.
+#
+# Docs: https://gremlins.dev/latest/configuration/
+unleash:
+  # Fail the run (non-zero exit) if the mutation score drops below this
+  # efficacy threshold, so it can gate a *nightly* job. 0 disables gating.
+  # We start conservative; ratchet upward as survivors are triaged.
+  threshold-efficacy: 0
+
+  # Do not fail solely because some mutants were NOT COVERED by any test; we
+  # track those separately (they indicate untested code, not weak assertions).
+  threshold-mcover: 0
+
+  # Keep going after the first surviving mutant so a full report is produced.
+  dry-run: false
+
+  # Integration tags are NOT enabled here: mutation testing runs the fast unit
+  # suite only, so it never requires Redis/Docker.
+  tags: ""
+
+  # Single worker. go-gremlins v0.5.0's parallel worktree "dealer" can panic
+  # ("error, this is temporary") when several workers race to materialise the
+  # per-worker source copy under newer Go toolchains. One worker is slower but
+  # reliable; raise it only if your gremlins/Go combination is stable with more.
+  workers: 1
+
+# Which mutant operators to apply. The defaults are a good baseline for
+# arithmetic/relational/boundary logic — exactly the class of bugs that matter
+# in rate-limiter and circuit-breaker arithmetic (token math, thresholds,
+# window boundaries, backoff).
+mutators:
+  arithmetic_base: true          # + - * / on numeric ops
+  arithmetic_assignment: true    # += -= *= /=
+  conditionals_boundary: true    # < <= > >=  (off-by-one / boundary bugs)
+  conditionals_negation: true    # == != and boolean negation
+  increment_decrement: true      # ++ --
+  invert_assignments: true
+  invert_bitwise: true
+  invert_bitwise_assignments: true
+  invert_logical: true           # && <-> ||
+  invert_loopctrl: true          # break <-> continue
+  invert_negatives: true         # -x <-> x
+  remove_self_assignments: true
