@@ -16,6 +16,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const logAlgorithmName = "sliding_window_log"
@@ -44,9 +45,12 @@ type SlidingWindowLog struct {
 	clock     clock.Clock
 	rec       metric.Recorder
 
-	mu   sync.RWMutex
-	logs map[string]*keyLog
+	// logs shards per-key state across GOMAXPROCS-sized stripes so requests for
+	// different keys don't serialize on one global lock.
+	logs *shardmap.Map[keyLog]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -107,7 +111,7 @@ func NewLog(limit int, window time.Duration, opts ...LogOption) *SlidingWindowLo
 		idleClean: window * 2,
 		clock:     clock.RealClock{},
 		rec:       metric.Default(),
-		logs:      make(map[string]*keyLog),
+		logs:      shardmap.New[keyLog](),
 		done:      make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -227,9 +231,7 @@ func (l *SlidingWindowLog) Peek(_ context.Context, key string) ratelimit.State {
 
 // Reset clears state for the given key.
 func (l *SlidingWindowLog) Reset(_ context.Context, key string) error {
-	l.mu.Lock()
-	delete(l.logs, key)
-	l.mu.Unlock()
+	l.logs.Delete(key)
 	return nil
 }
 
@@ -250,20 +252,9 @@ func (l *SlidingWindowLog) Close() error {
 }
 
 func (l *SlidingWindowLog) getOrCreate(key string) *keyLog {
-	l.mu.RLock()
-	kl, ok := l.logs[key]
-	l.mu.RUnlock()
-	if ok {
-		return kl
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if kl, ok = l.logs[key]; ok {
-		return kl
-	}
-	kl = &keyLog{lastAccess: l.clock.Now()}
-	l.logs[key] = kl
-	return kl
+	return l.logs.GetOrCreate(key, func() *keyLog {
+		return &keyLog{lastAccess: l.clock.Now()}
+	})
 }
 
 func (l *SlidingWindowLog) consume(kl *keyLog, n int) ratelimit.Result {
@@ -321,16 +312,12 @@ func (l *SlidingWindowLog) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := l.clock.Now().Add(-l.window * 2)
-			l.mu.Lock()
-			for k, kl := range l.logs {
+			l.logs.DeleteMatching(func(_ string, kl *keyLog) bool {
 				kl.mu.Lock()
 				idle := kl.lastAccess.Before(cutoff)
 				kl.mu.Unlock()
-				if idle {
-					delete(l.logs, k)
-				}
-			}
-			l.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }

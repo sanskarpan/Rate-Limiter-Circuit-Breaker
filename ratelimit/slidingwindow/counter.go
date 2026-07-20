@@ -9,6 +9,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const counterAlgorithmName = "sliding_window_counter"
@@ -51,9 +52,12 @@ type SlidingWindowCounter struct {
 	clock     clock.Clock
 	rec       metric.Recorder
 
-	mu       sync.RWMutex
-	counters map[string]*keyCounter
+	// counters shards per-key state across GOMAXPROCS-sized stripes so requests
+	// for different keys don't serialize on one global lock.
+	counters *shardmap.Map[keyCounter]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -114,7 +118,7 @@ func NewCounter(limit int, window time.Duration, opts ...CounterOption) *Sliding
 		idleClean: window * 5,
 		clock:     clock.RealClock{},
 		rec:       metric.Default(),
-		counters:  make(map[string]*keyCounter),
+		counters:  shardmap.New[keyCounter](),
 		done:      make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -245,9 +249,7 @@ func (swc *SlidingWindowCounter) Peek(_ context.Context, key string) ratelimit.S
 
 // Reset clears state for the given key.
 func (swc *SlidingWindowCounter) Reset(_ context.Context, key string) error {
-	swc.mu.Lock()
-	delete(swc.counters, key)
-	swc.mu.Unlock()
+	swc.counters.Delete(key)
 	return nil
 }
 
@@ -363,24 +365,13 @@ func (swc *SlidingWindowCounter) consume(kc *keyCounter, n int) ratelimit.Result
 }
 
 func (swc *SlidingWindowCounter) getOrCreate(key string) *keyCounter {
-	swc.mu.RLock()
-	kc, ok := swc.counters[key]
-	swc.mu.RUnlock()
-	if ok {
-		return kc
-	}
-	swc.mu.Lock()
-	defer swc.mu.Unlock()
-	if kc, ok = swc.counters[key]; ok {
-		return kc
-	}
-	now := swc.clock.Now()
-	kc = &keyCounter{
-		current:    windowBucket{windowStart: swc.windowStart(now)},
-		lastAccess: now,
-	}
-	swc.counters[key] = kc
-	return kc
+	return swc.counters.GetOrCreate(key, func() *keyCounter {
+		now := swc.clock.Now()
+		return &keyCounter{
+			current:    windowBucket{windowStart: swc.windowStart(now)},
+			lastAccess: now,
+		}
+	})
 }
 
 func (swc *SlidingWindowCounter) cleanupLoop() {
@@ -393,16 +384,12 @@ func (swc *SlidingWindowCounter) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := swc.clock.Now().Add(-swc.idleClean)
-			swc.mu.Lock()
-			for k, kc := range swc.counters {
+			swc.counters.DeleteMatching(func(_ string, kc *keyCounter) bool {
 				kc.mu.Lock()
 				idle := kc.lastAccess.Before(cutoff)
 				kc.mu.Unlock()
-				if idle {
-					delete(swc.counters, k)
-				}
-			}
-			swc.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }

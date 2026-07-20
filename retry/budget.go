@@ -66,6 +66,12 @@ type Budget struct {
 }
 
 // BudgetConfig configures a Budget.
+//
+// Zero value: NewBudget(BudgetConfig{}) does not panic — it yields a budget with
+// Burst defaulted to 1 and no refill (Ratio 0, MinPerSecond 0), i.e. it permits
+// a single retry and then stays exhausted. That is rarely what you want: set at
+// least Ratio or MinPerSecond so the bucket actually refills. The zero value is
+// tolerated for composability, not recommended as a preset.
 type BudgetConfig struct {
 	// Ratio is the fraction of throughput permitted as retries. For example,
 	// Ratio 0.1 permits roughly one retry per ten top-level requests at steady

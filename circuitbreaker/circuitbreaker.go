@@ -284,13 +284,14 @@ func (cb *CircuitBreaker) afterExecute(err error, duration time.Duration, ctx co
 
 // recordSuccess records a success and potentially closes the circuit.
 func (cb *CircuitBreaker) recordSuccess(state State, duration time.Duration) {
-	// Record in metrics window
-	switch cb.cfg.WindowType {
-	case TimeBased:
-		cb.timeWin.record(outcomeSuccess)
-	default:
-		cb.countWin.record(outcomeSuccess)
-	}
+	// Record in metrics window, capturing the post-record counts so the CLOSED
+	// open-check below reuses them instead of acquiring the window mutex a second
+	// time (§3.4). The counts are a consistent snapshot taken under record()'s
+	// lock. A concurrent record may land between record() returning and the
+	// check, but that was equally true of the old separate counts() call — the
+	// FSM only requires that SOME record eventually observes the crossed
+	// threshold, which the very next call still guarantees.
+	failures, requests := cb.recordOutcome(outcomeSuccess)
 
 	if cb.cfg.OnSuccess != nil {
 		cb.cfg.OnSuccess(cb.cfg.Name, duration)
@@ -305,22 +306,31 @@ func (cb *CircuitBreaker) recordSuccess(state State, duration time.Duration) {
 		}
 	case StateClosed:
 		// For time-based windows, check if failure rate threshold exceeded
-		// even on a success (since minimum requests may now be met)
-		if cb.cfg.WindowType == TimeBased && cb.shouldOpen() {
+		// even on a success (since minimum requests may now be met).
+		if cb.cfg.WindowType == TimeBased && cb.shouldOpenCounts(failures, requests) {
 			cb.transitionToOpen()
 		}
 	}
 }
 
-// recordFailure records a failure and potentially opens/reopens the circuit.
-func (cb *CircuitBreaker) recordFailure(state State, duration time.Duration, err error) {
-	// Record in metrics window
+// recordOutcome writes o into the active metrics window and returns the
+// post-record (failures, requests) totals as int64, hiding the window-type
+// switch from the hot-path callers (§3.4).
+func (cb *CircuitBreaker) recordOutcome(o outcome) (failures, requests int64) {
 	switch cb.cfg.WindowType {
 	case TimeBased:
-		cb.timeWin.record(outcomeFailure)
+		return cb.timeWin.record(o)
 	default:
-		cb.countWin.record(outcomeFailure)
+		f, t := cb.countWin.record(o)
+		return int64(f), int64(t)
 	}
+}
+
+// recordFailure records a failure and potentially opens/reopens the circuit.
+func (cb *CircuitBreaker) recordFailure(state State, duration time.Duration, err error) {
+	// Record in metrics window, capturing the post-record counts for the CLOSED
+	// open-check (§3.4 — avoids a second window-mutex acquisition + slide()).
+	failures, requests := cb.recordOutcome(outcomeFailure)
 
 	if cb.cfg.OnFailure != nil {
 		cb.cfg.OnFailure(cb.cfg.Name, duration, err)
@@ -331,26 +341,30 @@ func (cb *CircuitBreaker) recordFailure(state State, duration time.Duration, err
 		// Any failure in half-open reopens the circuit
 		cb.transitionToOpen()
 	case StateClosed:
-		// Check if thresholds are exceeded
-		if cb.shouldOpen() {
+		// Check if thresholds are exceeded, reusing the counts from record().
+		if cb.shouldOpenCounts(failures, requests) {
 			cb.transitionToOpen()
 		}
 	}
 }
 
-// shouldOpen returns true if the circuit should open based on current metrics.
-func (cb *CircuitBreaker) shouldOpen() bool {
+// shouldOpenCounts evaluates the open threshold from already-read (failures,
+// requests) counts without touching the window mutex. It is the single source of
+// truth for the trip decision, called by the record() hot path with the counts
+// returned from the same locked record() (§3.4) — so the threshold check no
+// longer needs a second window-mutex acquisition + slide(). For CountBased
+// windows `requests` is unused (the count window trips purely on the failure
+// count within its fixed-size ring).
+func (cb *CircuitBreaker) shouldOpenCounts(failures, requests int64) bool {
 	switch cb.cfg.WindowType {
 	case TimeBased:
-		failures, requests := cb.timeWin.counts()
 		if requests < int64(cb.cfg.MinimumRequests) {
 			return false
 		}
 		failureRate := float64(failures) / float64(requests)
 		return failures >= int64(cb.cfg.FailureThreshold) && failureRate >= cb.cfg.FailureRateThreshold
 	default:
-		failures, _ := cb.countWin.counts()
-		return failures >= cb.cfg.FailureThreshold
+		return failures >= int64(cb.cfg.FailureThreshold)
 	}
 }
 

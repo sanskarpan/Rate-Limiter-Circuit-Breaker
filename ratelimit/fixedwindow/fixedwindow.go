@@ -28,6 +28,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const algorithmName = "fixed_window"
@@ -48,9 +49,12 @@ type FixedWindowCounter struct {
 	rec       metric.Recorder
 	idleClean time.Duration
 
-	mu       sync.RWMutex
-	counters map[string]*counter
+	// counters shards per-key state across GOMAXPROCS-sized stripes so requests
+	// for different keys don't serialize on one global lock.
+	counters *shardmap.Map[counter]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	done   chan struct{}
 	wg     sync.WaitGroup
 	closed bool
@@ -116,7 +120,7 @@ func New(limit int, window time.Duration, opts ...Option) *FixedWindowCounter {
 		clock:     clock.RealClock{},
 		rec:       metric.Default(),
 		idleClean: 5 * time.Minute,
-		counters:  make(map[string]*counter),
+		counters:  shardmap.New[counter](),
 		done:      make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -245,9 +249,7 @@ func (fw *FixedWindowCounter) Peek(_ context.Context, key string) ratelimit.Stat
 
 // Reset clears state for the given key.
 func (fw *FixedWindowCounter) Reset(_ context.Context, key string) error {
-	fw.mu.Lock()
-	delete(fw.counters, key)
-	fw.mu.Unlock()
+	fw.counters.Delete(key)
 	return nil
 }
 
@@ -268,21 +270,10 @@ func (fw *FixedWindowCounter) Close() error {
 }
 
 func (fw *FixedWindowCounter) getOrCreate(key string) *counter {
-	fw.mu.RLock()
-	c, ok := fw.counters[key]
-	fw.mu.RUnlock()
-	if ok {
-		return c
-	}
-	fw.mu.Lock()
-	defer fw.mu.Unlock()
-	if c, ok = fw.counters[key]; ok {
-		return c
-	}
-	now := fw.clock.Now()
-	c = &counter{windowStart: fw.windowStart(now), lastAccess: now}
-	fw.counters[key] = c
-	return c
+	return fw.counters.GetOrCreate(key, func() *counter {
+		now := fw.clock.Now()
+		return &counter{windowStart: fw.windowStart(now), lastAccess: now}
+	})
 }
 
 func (fw *FixedWindowCounter) windowStart(now time.Time) time.Time {
@@ -346,16 +337,12 @@ func (fw *FixedWindowCounter) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := fw.clock.Now().Add(-fw.idleClean)
-			fw.mu.Lock()
-			for k, c := range fw.counters {
+			fw.counters.DeleteMatching(func(_ string, c *counter) bool {
 				c.mu.Lock()
 				idle := c.lastAccess.Before(cutoff)
 				c.mu.Unlock()
-				if idle {
-					delete(fw.counters, k)
-				}
-			}
-			fw.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }

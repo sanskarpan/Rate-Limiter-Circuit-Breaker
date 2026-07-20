@@ -447,6 +447,128 @@ func TestCB_Concurrent_StateTransitions_NoRace(t *testing.T) {
 	wg.Wait()
 }
 
+// TestCB_TimeBased_Concurrent_TripsAtThreshold hammers a TimeBased breaker with
+// a large mix of concurrent successes and failures and asserts the fast-path
+// audit (§3.4) preserves exact FSM correctness: the breaker must end OPEN because
+// the failure count and failure rate both clearly cross the configured
+// thresholds, and no outcome may be lost or double-counted under the race
+// detector. The window is long relative to the test so no bucket slide can drop
+// a datapoint mid-run, making the post-run assertion deterministic.
+func TestCB_TimeBased_Concurrent_TripsAtThreshold(t *testing.T) {
+	cfg := circuitbreaker.Config{
+		Name:                 t.Name(),
+		WindowType:           circuitbreaker.TimeBased,
+		WindowDuration:       time.Hour, // never slides during the test
+		BucketDuration:       time.Hour,
+		FailureThreshold:     50,
+		FailureRateThreshold: 0.5,
+		MinimumRequests:      100,
+		OpenTimeout:          time.Hour, // stay open once tripped (no half-open probes)
+		Clock:                clock.RealClock{},
+	}
+	cb := circuitbreaker.New(cfg)
+	ctx := context.Background()
+
+	const (
+		workers  = 64
+		perWkr   = 200
+		total    = workers * perWkr // 12800 calls
+		failEach = 3                // ~1/3 fail → rate ~0.33 < 0.5 threshold? no: 2/3 succeed
+	)
+
+	// Drive exactly 2/3 failures so the rate (~0.667) is safely above 0.5 and the
+	// absolute failure count is far above 50 — the breaker MUST trip. Every 3rd
+	// call succeeds; the other two fail.
+	var wg sync.WaitGroup
+	var idx atomic.Int64
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perWkr; i++ {
+				n := idx.Add(1)
+				if n%failEach == 0 {
+					cb.Execute(ctx, succeed) //nolint:errcheck
+				} else {
+					cb.Execute(ctx, fail) //nolint:errcheck
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if cb.State() != circuitbreaker.StateOpen {
+		t.Fatalf("expected Open after %d calls with ~67%% failures (threshold 50 count / 0.5 rate), got %s",
+			total, cb.State())
+	}
+
+	// Counting integrity: the breaker opened, so it stopped admitting calls once
+	// tripped. Every admitted call must be accounted for exactly once — requests
+	// must equal successes+failures and never exceed the number we issued.
+	snap := cb.Snapshot()
+	if snap.Requests != snap.Successes+snap.Failures {
+		t.Fatalf("count integrity violated: requests=%d != successes=%d + failures=%d",
+			snap.Requests, snap.Successes, snap.Failures)
+	}
+	if snap.Requests > total {
+		t.Fatalf("recorded more requests (%d) than were issued (%d)", snap.Requests, total)
+	}
+	if snap.Failures < cfg.FailureThreshold {
+		t.Fatalf("expected at least %d failures recorded before tripping, got %d",
+			cfg.FailureThreshold, snap.Failures)
+	}
+}
+
+// TestCB_TimeBased_Concurrent_StaysClosedBelowThreshold is the negative twin of
+// the trip test: with a mostly-successful mix the failure rate stays well below
+// the 0.5 threshold, so the fast-path audit (§3.4) must NOT spuriously open the
+// breaker under concurrency.
+func TestCB_TimeBased_Concurrent_StaysClosedBelowThreshold(t *testing.T) {
+	cfg := circuitbreaker.Config{
+		Name:                 t.Name(),
+		WindowType:           circuitbreaker.TimeBased,
+		WindowDuration:       time.Hour,
+		BucketDuration:       time.Hour,
+		FailureThreshold:     50,
+		FailureRateThreshold: 0.5,
+		MinimumRequests:      100,
+		OpenTimeout:          time.Hour,
+		Clock:                clock.RealClock{},
+	}
+	cb := circuitbreaker.New(cfg)
+	ctx := context.Background()
+
+	const workers = 64
+	const perWkr = 200
+	// Only every 10th call fails → rate ~0.1, far below 0.5. Must stay CLOSED.
+	var wg sync.WaitGroup
+	var idx atomic.Int64
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perWkr; i++ {
+				n := idx.Add(1)
+				if n%10 == 0 {
+					cb.Execute(ctx, fail) //nolint:errcheck
+				} else {
+					cb.Execute(ctx, succeed) //nolint:errcheck
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if cb.State() != circuitbreaker.StateClosed {
+		t.Fatalf("expected Closed with ~10%% failures (below 0.5 rate threshold), got %s", cb.State())
+	}
+	snap := cb.Snapshot()
+	if snap.Requests != snap.Successes+snap.Failures {
+		t.Fatalf("count integrity violated: requests=%d != successes=%d + failures=%d",
+			snap.Requests, snap.Successes, snap.Failures)
+	}
+}
+
 // TestCB_MetricWindow_CountBased_CorrectCount verifies count window ring buffer.
 func TestCB_MetricWindow_CountBased_CorrectCount(t *testing.T) {
 	cb := countBasedCB(t, 5, 5) // window=5, threshold=5

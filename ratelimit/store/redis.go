@@ -311,8 +311,31 @@ func (r *Redis) IncrBy(ctx context.Context, key string, delta int64, ttl time.Du
 
 // Eval executes a Lua script atomically on Redis.
 // The script parameter is the Lua script body, not a registered name.
+//
+// Allocation / escape-analysis notes (§3.3):
+//
+// A `go build -gcflags=-m` pass over this package shows the residual per-call
+// allocations on the distributed path are all inherent to the go-redis API and
+// dominated by the network round-trip (sub-microsecond of GC against a
+// millisecond-scale RTT), so pooling them would add risk without a measurable
+// win:
+//
+//   - prefixedKeys below is handed to go-redis, which retains/forwards the
+//     slice, so it escapes past this function and CANNOT be safely pooled.
+//   - the variadic args boxes its int64/float64 values into interface{}; those
+//     boxes escape into the client call. Preallocating a per-call []any here
+//     would not remove the boxing, only move it, so it is not worth the churn.
+//   - key prefixing (r.prefixed) concatenates strings; the result is required
+//     by the protocol and unavoidable.
+//
+// The in-memory emulation (scripts_memory.go) is the CPU-bound path; its only
+// per-call allocations are the []any result slice and the strconv-formatted
+// state strings, both of which escape by contract (they are the returned reply
+// / the persisted per-key state) and so are likewise not poolable. The local
+// (non-distributed) Allow paths were already 0-alloc and remain so.
 func (r *Redis) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
-	// Prefix keys
+	// Prefix keys. This slice escapes into go-redis (see the note above), so it
+	// is intentionally allocated per call rather than pooled.
 	prefixedKeys := make([]string, len(keys))
 	for i, k := range keys {
 		prefixedKeys[i] = r.prefixed(k)

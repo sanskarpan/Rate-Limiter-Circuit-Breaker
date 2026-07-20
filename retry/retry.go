@@ -24,6 +24,12 @@ import (
 var ErrMaxAttemptsExceeded = errors.New("retry: max attempts exceeded")
 
 // Policy defines how a function should be retried on failure.
+//
+// Zero value: the zero Policy is valid and safe to use directly. A zero Policy
+// makes exactly one attempt (MaxAttempts 0 is treated as 1), with no delay
+// (nil Backoff), retrying all non-nil errors if MaxAttempts were raised, using a
+// real clock and no shared budget. Set fields (or use New with Options) to enable
+// retries.
 type Policy struct {
 	// MaxAttempts is the total number of calls to fn, including the first attempt.
 	// A value of 1 means no retries: fn is called exactly once.

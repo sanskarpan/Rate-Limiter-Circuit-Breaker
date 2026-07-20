@@ -36,6 +36,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const algorithmName = "leaky_bucket"
@@ -109,9 +110,13 @@ type LeakyBucket struct {
 	leakRate  float64 // requests per second
 	idleClean time.Duration
 
-	mu     sync.RWMutex
-	queues map[string]*keyQueue
+	// queues shards per-key state across GOMAXPROCS-sized stripes so requests
+	// for different keys don't serialize on one global lock. Per-key producer /
+	// leaker synchronization is done by keyQueue.mu, not this map.
+	queues *shardmap.Map[keyQueue]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	clock  clock.Clock
 	rec    metric.Recorder
 	done   chan struct{}
@@ -143,7 +148,7 @@ func New(capacity int, leakRate float64, opts ...Option) *LeakyBucket {
 		clock:     clock.RealClock{},
 		rec:       metric.Default(),
 		done:      make(chan struct{}),
-		queues:    make(map[string]*keyQueue),
+		queues:    shardmap.New[keyQueue](),
 	}
 	for _, opt := range opts {
 		opt(lb)
@@ -481,27 +486,30 @@ func (lb *LeakyBucket) Peek(_ context.Context, key string) ratelimit.State {
 
 // Reset removes all state for the given key.
 func (lb *LeakyBucket) Reset(_ context.Context, key string) error {
-	lb.mu.Lock()
-	defer lb.mu.Unlock()
-	if q, ok := lb.queues[key]; ok {
-		// Drain the queue, denying all pending requests
-		for {
-			select {
-			case t := <-q.ch:
-				t.result <- ratelimit.Result{
-					Allowed:   false,
-					Limit:     lb.capacity,
-					Remaining: 0,
-					Algorithm: algorithmName,
-				}
-			default:
-				goto drained
-			}
-		}
-	drained:
-		lb.drainPriority(q)
-		delete(lb.queues, key)
+	q, ok := lb.queues.Get(key)
+	if !ok {
+		return nil
 	}
+	// Drain the queue, denying all pending requests, BEFORE removing the key from
+	// the map. The leaker only exits once it observes the key gone (via
+	// queues.Get), so draining first guarantees no token is stranded by a leaker
+	// that raced ahead and exited mid-drain.
+	for {
+		select {
+		case t := <-q.ch:
+			t.result <- ratelimit.Result{
+				Allowed:   false,
+				Limit:     lb.capacity,
+				Remaining: 0,
+				Algorithm: algorithmName,
+			}
+		default:
+			goto drained
+		}
+	}
+drained:
+	lb.drainPriority(q)
+	lb.queues.Delete(key)
 	return nil
 }
 
@@ -527,30 +535,25 @@ func (lb *LeakyBucket) String() string {
 }
 
 // getOrCreate returns the queue for key, creating it if needed.
+//
+// The create callback runs at most once per key under the shard write lock, so
+// exactly one leaker goroutine is started per live key (no double-start race).
 func (lb *LeakyBucket) getOrCreate(key string) *keyQueue {
-	lb.mu.RLock()
-	q, ok := lb.queues[key]
-	lb.mu.RUnlock()
-	if ok {
+	return lb.queues.GetOrCreate(key, func() *keyQueue {
+		now := lb.clock.Now()
+		q := &keyQueue{
+			ch:         make(chan token, lb.capacity),
+			capacity:   lb.capacity,
+			leakRate:   lb.leakRate,
+			lastAccess: now,
+		}
+		// Start a per-key leaker goroutine. Add to the WaitGroup before the
+		// goroutine is scheduled and while the shard lock is held so Close's
+		// Wait always accounts for it.
+		lb.wg.Add(1)
+		go lb.leaker(key, q)
 		return q
-	}
-	lb.mu.Lock()
-	defer lb.mu.Unlock()
-	if q, ok = lb.queues[key]; ok {
-		return q
-	}
-	now := lb.clock.Now()
-	q = &keyQueue{
-		ch:         make(chan token, lb.capacity),
-		capacity:   lb.capacity,
-		leakRate:   lb.leakRate,
-		lastAccess: now,
-	}
-	lb.queues[key] = q
-	// Start a per-key leaker goroutine
-	lb.wg.Add(1)
-	go lb.leaker(key, q)
-	return q
+	})
 }
 
 // leaker processes requests from the key's queue at the configured leak rate.
@@ -589,9 +592,7 @@ func (lb *LeakyBucket) leaker(key string, q *keyQueue) {
 					Remaining: remaining,
 					Algorithm: algorithmName,
 				}
-				lb.mu.RLock()
-				_, exists := lb.queues[key]
-				lb.mu.RUnlock()
+				_, exists := lb.queues.Get(key)
 				if !exists {
 					return
 				}
@@ -629,9 +630,7 @@ func (lb *LeakyBucket) leaker(key string, q *keyQueue) {
 					}
 				}
 				// Check if this key is still needed — cleanup idle queues
-				lb.mu.RLock()
-				_, exists := lb.queues[key]
-				lb.mu.RUnlock()
+				_, exists := lb.queues.Get(key)
 				if !exists {
 					return
 				}
@@ -708,16 +707,12 @@ func (lb *LeakyBucket) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := lb.clock.Now().Add(-lb.idleClean)
-			lb.mu.Lock()
-			for k, q := range lb.queues {
+			lb.queues.DeleteMatching(func(_ string, q *keyQueue) bool {
 				q.mu.Lock()
 				idle := q.lastAccess.Before(cutoff) && q.depthLocked() == 0
 				q.mu.Unlock()
-				if idle {
-					delete(lb.queues, k)
-				}
-			}
-			lb.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }
