@@ -28,6 +28,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const algorithmName = "token_bucket"
@@ -49,9 +50,12 @@ type TokenBucket struct {
 	refillRate atomicx.Float64 // tokens per second
 	idleClean  time.Duration
 
-	mu      sync.RWMutex
-	buckets map[string]*bucket
+	// buckets shards per-key state across GOMAXPROCS-sized stripes so requests
+	// for different keys don't serialize on one global lock (see internal/shardmap).
+	buckets *shardmap.Map[bucket]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	clock  clock.Clock
 	rec    metric.Recorder
 	done   chan struct{}
@@ -84,7 +88,7 @@ func New(capacity float64, refillRate float64, opts ...Option) *TokenBucket {
 		clock:     clock.RealClock{},
 		rec:       metric.Default(),
 		done:      make(chan struct{}),
-		buckets:   make(map[string]*bucket),
+		buckets:   shardmap.New[bucket](),
 	}
 	tb.capacity.Store(capacity)
 	tb.refillRate.Store(refillRate)
@@ -262,9 +266,7 @@ func (tb *TokenBucket) Peek(_ context.Context, key string) ratelimit.State {
 
 // Reset removes all state for the given key, restoring it to full capacity.
 func (tb *TokenBucket) Reset(_ context.Context, key string) error {
-	tb.mu.Lock()
-	delete(tb.buckets, key)
-	tb.mu.Unlock()
+	tb.buckets.Delete(key)
 	return nil
 }
 
@@ -310,39 +312,24 @@ func (tb *TokenBucket) SetLimit(capacity, refillRate float64) {
 
 	// Clamp any existing bucket's tokens down to the new capacity so a shrink
 	// takes effect immediately instead of leaving stale over-capacity balances.
-	tb.mu.RLock()
-	buckets := make([]*bucket, 0, len(tb.buckets))
-	for _, b := range tb.buckets {
-		buckets = append(buckets, b)
-	}
-	tb.mu.RUnlock()
-	for _, b := range buckets {
+	// Range holds only one shard's read lock at a time; the per-bucket mutex is
+	// a different lock, so taking b.mu inside the callback cannot deadlock.
+	tb.buckets.Range(func(_ string, b *bucket) bool {
 		b.mu.Lock()
 		if b.tokens > capacity {
 			b.tokens = capacity
 		}
 		b.mu.Unlock()
-	}
+		return true
+	})
 }
 
 // getOrCreate returns the bucket for key, creating it full if needed.
 func (tb *TokenBucket) getOrCreate(key string) *bucket {
-	tb.mu.RLock()
-	b, ok := tb.buckets[key]
-	tb.mu.RUnlock()
-	if ok {
-		return b
-	}
-	tb.mu.Lock()
-	defer tb.mu.Unlock()
-	// Double-check after write lock
-	if b, ok = tb.buckets[key]; ok {
-		return b
-	}
-	now := tb.clock.Now()
-	b = &bucket{tokens: tb.capacity.Load(), lastRefill: now, lastAccess: now}
-	tb.buckets[key] = b
-	return b
+	return tb.buckets.GetOrCreate(key, func() *bucket {
+		now := tb.clock.Now()
+		return &bucket{tokens: tb.capacity.Load(), lastRefill: now, lastAccess: now}
+	})
 }
 
 // refill computes and applies token accumulation since lastRefill.
@@ -424,16 +411,12 @@ func (tb *TokenBucket) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := tb.clock.Now().Add(-tb.idleClean)
-			tb.mu.Lock()
-			for k, b := range tb.buckets {
+			tb.buckets.DeleteMatching(func(_ string, b *bucket) bool {
 				b.mu.Lock()
 				idle := b.lastAccess.Before(cutoff)
 				b.mu.Unlock()
-				if idle {
-					delete(tb.buckets, k)
-				}
-			}
-			tb.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }
