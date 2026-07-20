@@ -1,0 +1,93 @@
+# MkDocs configuration for the Resilience toolkit documentation site.
+#
+# The site is built entirely from the markdown already in docs/ — every nav
+# entry below points at a real file in that directory. Build locally with:
+#
+#     pip install mkdocs-material
+#     mkdocs serve      # live preview at http://127.0.0.1:8000
+#     mkdocs build      # emit the static site into ./site
+#
+# CI builds and deploys this to GitHub Pages via .github/workflows/docs.yml.
+site_name: Resilience — Go rate limiting & circuit breaking
+site_description: >-
+  Zero-dependency-core Go resilience toolkit: eight rate-limiting algorithms,
+  circuit breaker, retry, timeout, bulkhead, fallback and a fixed-order pipeline.
+site_author: sanskarpan
+repo_url: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker
+repo_name: sanskarpan/Rate-Limiter-Circuit-Breaker
+edit_uri: edit/main/docs/
+
+# All markdown sources live in docs/.
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Algorithms: algorithms.md
+      - Comparison & decision guide: comparison.md
+      - Distributed limiting: distributed.md
+      - Migration guide: migration.md
+      - Examples: examples.md
+  - Cookbook:
+      - Overview: cookbook/index.md
+      - Per-IP limiting across frameworks: cookbook/ratelimit-per-ip-frameworks.md
+      - Per-tenant quotas: cookbook/per-tenant-quotas.md
+      - Cost-weighted limiting: cookbook/cost-weighted-limiting.md
+      - Flaky downstream — breaker + retry + hedge: cookbook/flaky-downstream-cb-retry-hedge.md
+      - Distributed Redis with fail-open: cookbook/distributed-redis-failopen.md
+      - Adaptive concurrency + load shedding: cookbook/adaptive-concurrency-loadshed.md
+      - Observability — Prometheus & OpenTelemetry: cookbook/observability-prometheus-otel.md
+  - Design & guarantees:
+      - Architecture Decision Records: adr/README.md
+      - ADR-0001 Zero-dependency core: adr/0001-zero-dependency-core.md
+      - ADR-0002 Clock interface for determinism: adr/0002-clock-interface-for-determinism.md
+      - ADR-0003 Store interface & Lua: adr/0003-store-interface-and-lua-for-distributed.md
+      - ADR-0004 Fail-open philosophy: adr/0004-fail-open-resilience-philosophy.md
+      - Consistency guarantees: consistency-guarantees.md
+      - Redis key lifecycle: redis-key-lifecycle.md
+      - Multi-region strategy: multi-region.md
+      - Stability policy: STABILITY.md
+      - Benchmarks: benchmarks.md
+  - Blog & talks:
+      - Overview: blog/index.md
+      - Zero-dependency resilience library: blog/zero-dependency-resilience.md
+      - GCRA vs token bucket: blog/gcra-vs-token-bucket.md
+      - Talk outline: blog/talk-outline.md
+  - Contributing:
+      - Good first issues: good-first-issues.md
