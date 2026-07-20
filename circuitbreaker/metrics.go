@@ -35,8 +35,12 @@ func newCountWindow(size int) *countWindow {
 	}
 }
 
-// record adds an outcome to the ring buffer.
-func (w *countWindow) record(o outcome) {
+// record adds an outcome to the ring buffer and returns the window-wide
+// (failures, total) counts as of this insertion. Returning the post-record
+// counts lets the CLOSED hot path evaluate the open threshold without a second
+// counts() mutex acquisition; both happen under the same lock, so the snapshot
+// is consistent (§3.4).
+func (w *countWindow) record(o outcome) (failures, total int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	// Evict the oldest entry if buffer is full
@@ -54,6 +58,7 @@ func (w *countWindow) record(o outcome) {
 		w.failures++
 	}
 	w.head = (w.head + 1) % w.size
+	return w.failures, w.total
 }
 
 // counts returns (failures, total) in the window.
@@ -135,8 +140,16 @@ func newTimeWindow(windowDuration, bucketWidth time.Duration, clk clock.Clock) *
 	}
 }
 
-// record adds an outcome to the current bucket, sliding as needed.
-func (w *timeWindow) record(o outcome) {
+// record adds an outcome to the current bucket, sliding as needed, and returns
+// the window-wide (failures, requests) totals as of this insertion.
+//
+// Returning the post-record counts lets the CLOSED hot path evaluate the open
+// threshold WITHOUT a second mutex acquisition (and second slide()) via a
+// separate counts() call. Both the mutation and the read happen under the same
+// lock, so the returned totals are a consistent snapshot — never torn against a
+// concurrent record — and the threshold decision is exactly as correct as it was
+// when it read counts() separately (§3.4).
+func (w *timeWindow) record(o outcome) (failures, requests int64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.slide()
@@ -147,6 +160,7 @@ func (w *timeWindow) record(o outcome) {
 		w.failures++
 	}
 	w.requests++
+	return w.failures, w.requests
 }
 
 // slide evicts expired buckets and advances the window to now.
