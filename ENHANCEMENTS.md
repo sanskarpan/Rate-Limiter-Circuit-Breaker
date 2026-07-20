@@ -781,7 +781,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** testcontainers needs Docker locally; keep the env-var fallback.
 - **References:** `testcontainers-go`, `alicebob/miniredis`.
 
-### 6.4 Frontend tests in CI (unit + Playwright e2e)
+### 6.4 Frontend tests in CI (unit + Playwright e2e)  
+> ✅ **Implemented & merged** — Vitest + React Testing Library + jest-axe unit suite (52 tests across 10 files) wired into the CI `frontend` job via `npm run test:unit`, alongside the existing Playwright e2e job.
 - **Category:** Testing · **Priority:** **P0** (paired with §2 CI) · **Effort:** S
 - **Rationale:** The frontend has a Playwright suite (`frontend/e2e/app.spec.ts`,
   `playwright.config.ts`) but **CI never runs it** — no lint, no `tsc`, no e2e. The playground
@@ -1066,7 +1067,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 
 ## 10. Frontend / Demo
 
-### 10.1 Frontend accessibility pass
+### 10.1 Frontend accessibility pass  
+> ✅ **Implemented & merged** — labelled nav landmarks, `aria-current`/`aria-live` regions, form label associations, `role=img`+title/desc on SVG viz, focus-visible rings, reduced-motion, and contrast fixes; automated jest-axe assertions on key components.
 - **Category:** Frontend · **Priority:** P2 · **Effort:** M
 - **Rationale:** The playground has only two `aria-label`s (on `TokenBucketViz` and
   `StateMachineViz`); no ARIA live regions for streaming updates, no keyboard navigation, no
@@ -1077,7 +1079,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   for the simulator, `role`/labels on SVG visualizations, and axe-core checks in Playwright.
 - **References:** WCAG 2.2, `@axe-core/playwright`.
 
-### 10.2 Richer WS-driven charts & missing visualizations
+### 10.2 Richer WS-driven charts & missing visualizations  
+> ✅ **Implemented & merged** — new recharts visualizations (rolling allow/deny ratio, latency histogram, circuit-breaker state timeline), each point-capped, animation-disabled and memoized to avoid re-render storms.
 - **Category:** Frontend · **Priority:** P3 · **Effort:** M
 - **Rationale:** WS streaming works (`frontend/lib/ws/manager.ts` with reconnect/backoff; store
   keeps 200-item history), but visualization coverage is uneven — token bucket has an animated
@@ -1113,7 +1116,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   (or mock the API for a static demo); add PR preview deployments.
 - **References:** Vercel Next.js deploys.
 
-### 10.5 Frontend component unit tests
+### 10.5 Frontend component unit tests  
+> ✅ **Implemented & merged** — Vitest + RTL component/hook/store tests (charts render with mock data, WS hook message handling, controls, empty/error states) with a `test:unit` script.
 - **Category:** Frontend / Testing · **Priority:** P3 · **Effort:** S
 - **Rationale:** Only 3 Playwright e2e cases exist; no component-level tests for the store
   reducers, WS manager reconnect logic, or visualizations.
