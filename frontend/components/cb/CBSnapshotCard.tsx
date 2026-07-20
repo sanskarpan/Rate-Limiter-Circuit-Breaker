@@ -55,12 +55,22 @@ export function CBSnapshotCard({ snapshot, onExecute }: CBSnapshotCardProps) {
         </div>
 
         {onExecute && (
-          <div className="mt-4 flex gap-2">
+          <div
+            className="mt-4 flex gap-2"
+            role="group"
+            aria-label={`Simulate a request on the ${name} circuit breaker`}
+          >
             {(['success', 'failure', 'timeout'] as const).map((sim) => (
               <motion.button
                 key={sim}
+                type="button"
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onExecute(sim)}
+                // Give a longer description via aria-description while keeping the
+                // accessible NAME as the visible word ("success"/"failure"/
+                // "timeout") — the surrounding role="group" supplies breaker
+                // context, and existing e2e selectors match on the visible name.
+                aria-description={`Simulate a ${sim} on the ${name} circuit breaker`}
                 className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition-colors ${BUTTON_STYLES[sim]}`}
               >
                 {sim}

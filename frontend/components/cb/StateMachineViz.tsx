@@ -71,7 +71,16 @@ function getNodeCenter(id: CBState) {
 export function StateMachineViz({ state }: StateMachineVizProps) {
   return (
     <div className="flex flex-col items-center gap-4">
-      <svg viewBox="0 0 360 220" className="w-full max-w-sm" aria-label="Circuit breaker state machine">
+      <svg
+        viewBox="0 0 360 220"
+        className="w-full max-w-sm"
+        role="img"
+        aria-label={`Circuit breaker state machine. Current state: ${state}.`}
+      >
+        <title>Circuit breaker state machine</title>
+        <desc>
+          {`States: CLOSED, OPEN and HALF OPEN. The breaker is currently ${state}.`}
+        </desc>
         <defs>
           {(['closed', 'open', 'half-open'] as CBState[]).map((id) => (
             <marker
