@@ -32,6 +32,7 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/internal/shardmap"
 )
 
 const algorithmName = "gcra"
@@ -55,9 +56,12 @@ type GCRA struct {
 	emissionInterval time.Duration // window / limit
 	burstOffset      time.Duration // emissionInterval * (burst - 1)
 
-	mu      sync.RWMutex
-	entries map[string]*entry
+	// entries shards per-key TAT state across GOMAXPROCS-sized stripes so
+	// requests for different keys don't serialize on one global lock.
+	entries *shardmap.Map[entry]
 
+	// mu now guards only limiter lifecycle state (closed), not the key map.
+	mu     sync.Mutex
 	clock  clock.Clock
 	rec    metric.Recorder
 	done   chan struct{}
@@ -97,7 +101,7 @@ func New(limit int, burst int, window time.Duration, opts ...Option) *GCRA {
 		clock:            clock.RealClock{},
 		rec:              metric.Default(),
 		done:             make(chan struct{}),
-		entries:          make(map[string]*entry),
+		entries:          shardmap.New[entry](),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -269,9 +273,7 @@ func (g *GCRA) Peek(_ context.Context, key string) ratelimit.State {
 
 // Reset removes all state for the given key.
 func (g *GCRA) Reset(_ context.Context, key string) error {
-	g.mu.Lock()
-	delete(g.entries, key)
-	g.mu.Unlock()
+	g.entries.Delete(key)
 	return nil
 }
 
@@ -369,22 +371,10 @@ func (g *GCRA) consume(e *entry, n int) ratelimit.Result {
 
 // getOrCreate returns the entry for key, creating it if needed.
 func (g *GCRA) getOrCreate(key string) *entry {
-	g.mu.RLock()
-	e, ok := g.entries[key]
-	g.mu.RUnlock()
-	if ok {
-		return e
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if e, ok = g.entries[key]; ok {
-		return e
-	}
-	now := g.clock.Now()
-	e = &entry{lastAccess: now}
-	// TAT starts as zero time — first request always allowed since max(zero, now) = now
-	g.entries[key] = e
-	return e
+	return g.entries.GetOrCreate(key, func() *entry {
+		// TAT starts as zero time — first request always allowed since max(zero, now) = now
+		return &entry{lastAccess: g.clock.Now()}
+	})
 }
 
 // cleanupLoop periodically evicts entries that haven't been accessed recently.
@@ -401,16 +391,12 @@ func (g *GCRA) cleanupLoop() {
 			return
 		case <-ticker.C():
 			cutoff := g.clock.Now().Add(-g.idleClean)
-			g.mu.Lock()
-			for k, e := range g.entries {
+			g.entries.DeleteMatching(func(_ string, e *entry) bool {
 				e.mu.Lock()
 				idle := e.lastAccess.Before(cutoff)
 				e.mu.Unlock()
-				if idle {
-					delete(g.entries, k)
-				}
-			}
-			g.mu.Unlock()
+				return idle
+			})
 		}
 	}
 }
