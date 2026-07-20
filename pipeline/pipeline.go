@@ -97,6 +97,10 @@ type Builder struct {
 }
 
 // New creates a new Pipeline builder.
+//
+// Zero value: the zero Builder is valid — &Builder{} (what New returns) is an
+// empty pipeline; Build on it yields a pipeline that simply invokes the wrapped
+// function with no resilience stages. Add stages fluently before Build.
 func New() *Builder {
 	return &Builder{}
 }

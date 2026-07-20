@@ -38,6 +38,12 @@ const (
 )
 
 // CacheConfig configures a Cached instance.
+//
+// Zero value: the zero CacheConfig is valid. NewCached[T](CacheConfig{}) returns
+// a working cache in ModeAlwaysCallPrimary with no fresh window (TTL≤0), no
+// stale-while-error serving (StaleWhileError≤0), and unbounded capacity
+// (MaxEntries≤0) — i.e. it always calls the primary and never falls back until
+// you opt into TTL/StaleWhileError. Set only the fields you need.
 type CacheConfig struct {
 	// TTL is how long a stored value is considered "fresh".
 	//

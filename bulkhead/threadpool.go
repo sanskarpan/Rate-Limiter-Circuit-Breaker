@@ -41,6 +41,11 @@ type ThreadPool struct {
 // NewThreadPool creates a new ThreadPool with the specified number of worker
 // goroutines and task queue depth. Workers are started immediately and run
 // until Close is called.
+//
+// Required-argument contract: workers is mandatory and must be > 0 (a pool with
+// zero workers could never make progress), so NewThreadPool panics on
+// workers <= 0. queueSize is allowed to be 0 (an unbuffered, fully-synchronous
+// hand-off) but must not be negative; a negative queueSize panics.
 func NewThreadPool(workers, queueSize int) *ThreadPool {
 	if workers <= 0 {
 		panic("thread pool: workers must be greater than zero")

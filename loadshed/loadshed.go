@@ -85,6 +85,12 @@ const priorityCeil = PriorityCritical
 
 // Config tunes the CoDel controller. The zero value is not usable directly; use
 // New, which fills unset fields with the Default* values.
+// Config configures a Shedder.
+//
+// Zero value: the zero Config is valid. loadshed.New(Config{}) fills every unset
+// field with its default (Target→DefaultTarget, Interval→DefaultInterval,
+// PriorityStep→defaultPriorityStep) and uses a real clock, so a zero Config
+// yields a working CoDel shedder with the standard tuning.
 type Config struct {
 	// Target is the acceptable standing-queue sojourn time. The controller only
 	// begins shedding when the minimum observed sojourn stays at or above Target

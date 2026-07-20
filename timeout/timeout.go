@@ -110,7 +110,10 @@ type Timeout struct {
 }
 
 // New creates a new Timeout with the given duration.
-// If d <= 0, no timeout is applied.
+//
+// Zero value: d is a true zero-value option — New(0) (and the zero Timeout{})
+// is valid and simply applies no timeout, running fn to completion. Pass a
+// positive d to bound each call.
 func New(d time.Duration) *Timeout {
 	return &Timeout{duration: d}
 }

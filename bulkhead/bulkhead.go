@@ -180,9 +180,13 @@ func WithClock(now func() time.Time) Option {
 }
 
 // New creates a new Bulkhead with the given concurrency limit and wait timeout.
-// maxConcurrency must be greater than zero.
-// maxWait of 0 means non-blocking: if no slot is available the call is
-// rejected immediately.
+//
+// Required-argument contract: maxConcurrency is a mandatory, non-zero argument —
+// New panics if maxConcurrency <= 0. There is no meaningful default for a
+// concurrency ceiling (a zero limit would admit nothing), so this is enforced at
+// construction rather than silently defaulted. maxWait is a true zero-value
+// option: maxWait of 0 means non-blocking (if no slot is available the call is
+// rejected immediately).
 func New(maxConcurrency int, maxWait time.Duration, opts ...Option) *Bulkhead {
 	if maxConcurrency <= 0 {
 		panic("bulkhead: maxConcurrency must be greater than zero")
