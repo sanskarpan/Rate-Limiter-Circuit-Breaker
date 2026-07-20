@@ -50,7 +50,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install MkDocs
-        run: pip install mkdocs-material
+        run: pip install "mkdocs-material>=9.5,<9.6"
 
       # --strict fails the build on broken internal links or nav paths that
       # don't resolve to a real file, so the site can't drift from docs/.
