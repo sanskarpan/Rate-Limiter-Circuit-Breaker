@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/lib/store'
 import { getAllCBSnapshots, executeCB } from '@/lib/api/client'
 import { usePoll } from '@/hooks/usePoll'
 import { StateMachineViz } from '@/components/cb/StateMachineViz'
 import { CBSnapshotCard } from '@/components/cb/CBSnapshotCard'
+import { CBStateTimeline, type CBStatePoint } from '@/components/charts/CBStateTimeline'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { MetricTile } from '@/components/ui/MetricTile'
 import type { CBState } from '@/lib/api/types'
@@ -37,6 +38,8 @@ export default function CircuitBreakerPage() {
 
   const [execLog, setExecLog] = useState<ExecEntry[]>([])
   const [selectedCB, setSelectedCB] = useState<string | null>(null)
+  // Rolling per-breaker state history for the timeline chart, keyed by name.
+  const [stateHistory, setStateHistory] = useState<Record<string, CBStatePoint[]>>({})
 
   const fetchSnapshots = useCallback(async () => {
     try {
@@ -53,6 +56,24 @@ export default function CircuitBreakerPage() {
   }, [setCBSnapshots, selectedCB])
 
   usePoll(fetchSnapshots, { interval: 2000 })
+
+  // Append a timeline point whenever a breaker's state changes. Capped at 120
+  // points per breaker so the chart stays cheap over a long session.
+  useEffect(() => {
+    setStateHistory((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const snap of Object.values(cbSnapshots)) {
+        const hist = prev[snap.name] ?? []
+        const last = hist[hist.length - 1]
+        if (!last || last.state !== snap.state) {
+          next[snap.name] = [...hist, { t: Date.now(), state: snap.state }].slice(-120)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [cbSnapshots])
 
   const handleExecute = useCallback(
     async (name: string, simulate: 'success' | 'failure' | 'timeout') => {
@@ -134,10 +155,13 @@ export default function CircuitBreakerPage() {
           ) : (
             <>
               {/* CB selector tabs */}
-              <div className="flex gap-2">
+              <div className="flex gap-2" role="tablist" aria-label="Circuit breakers">
                 {cbList.map((cb) => (
                   <button
                     key={cb.name}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedCB === cb.name}
                     onClick={() => setSelectedCB(cb.name)}
                     className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                       selectedCB === cb.name
@@ -159,24 +183,28 @@ export default function CircuitBreakerPage() {
 
               {/* Stats grid */}
               {selectedSnapshot && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-live="polite">
                   <MetricTile
                     label="Total Requests"
                     value={selectedSnapshot.requests}
+                    live
                   />
                   <MetricTile
                     label="Failures"
                     value={selectedSnapshot.failures}
                     color={selectedSnapshot.failures > 0 ? 'red' : 'green'}
+                    live
                   />
                   <MetricTile
                     label="Successes"
                     value={selectedSnapshot.successes}
                     color="green"
+                    live
                   />
                   <MetricTile
                     label="Failure Rate"
                     value={`${(selectedSnapshot.failure_rate * 100).toFixed(1)}%`}
+                    live
                     color={
                       selectedSnapshot.failure_rate > 0.5
                         ? 'red'
@@ -191,6 +219,19 @@ export default function CircuitBreakerPage() {
           )}
         </div>
       </div>
+
+      {/* State timeline */}
+      {selectedSnapshot && (
+        <Card>
+          <CardHeader>
+            <CardTitle>State Timeline</CardTitle>
+            <span className="text-xs text-gray-400">{selectedSnapshot.name}</span>
+          </CardHeader>
+          <CardContent>
+            <CBStateTimeline points={stateHistory[selectedSnapshot.name] ?? []} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Execution log */}
       <Card>
