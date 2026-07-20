@@ -413,6 +413,28 @@ The repository ships a demo server (Go) and a Next.js frontend that visualize
 each algorithm in real time. **These are demos, not part of the importable
 library.**
 
+### Installing the demo server
+
+The demo server is a standalone binary. Pick whichever is convenient:
+
+```bash
+# Homebrew (macOS / Linux) — via the project tap
+brew install sanskarpan/tap/resilience-demo
+
+# go install — pulls and builds the latest tagged server
+go install github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server@latest
+
+# Docker (GHCR) — multi-arch image published on every release
+docker run --rm -p 8080:8080 ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest
+```
+
+Prebuilt, checksummed, SBOM'd and cosign-signed archives are also attached to
+every [GitHub release](https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/releases).
+
+> The Homebrew tap (`sanskarpan/homebrew-tap`) and Docker/GHCR images are for the
+> **demo server only** — the importable library is always consumed with
+> `go get github.com/sanskarpan/Rate-Limiter-Circuit-Breaker`.
+
 ### Server
 
 ```bash
@@ -462,6 +484,10 @@ docker-compose up    # demo server + Redis + Prometheus + Grafana
 
 ## Documentation
 
+- [docs/examples.md](docs/examples.md) — runnable programs under `examples/` (http, gRPC,
+  pipeline, distributed, resilience-stack, tiered, debounce) with a "run it" guide
+- [docs/blog/](docs/blog/index.md) — design write-ups (zero-dependency core, GCRA vs token
+  bucket) and a conference-talk outline
 - [docs/algorithms.md](docs/algorithms.md) — per-algorithm theory, formulas, and properties
 - [docs/comparison.md](docs/comparison.md) — trade-offs and a decision guide
 - [docs/distributed.md](docs/distributed.md) — Redis-backed limiters, fallback modes, cluster notes
