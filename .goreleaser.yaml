@@ -123,6 +123,41 @@ docker_manifests:
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-amd64"
       - "ghcr.io/sanskarpan/rate-limiter-circuit-breaker:latest-arm64"
 
+# ─── Homebrew tap ─────────────────────────────────────────────────────────────
+# Publishes the demo-server binary as a Homebrew formula named `resilience-demo`
+# so users can `brew install sanskarpan/tap/resilience-demo`.
+#
+# ONE-TIME MANUAL SETUP (maintainer):
+#   1. Create the tap repo `sanskarpan/homebrew-tap` on GitHub (public, empty).
+#   2. Add a `HOMEBREW_TAP_GITHUB_TOKEN` secret to THIS repo — a PAT with
+#      `contents:write` on the tap repo — so goreleaser can push the formula.
+# goreleaser commits the generated formula to that tap on every `v*` release.
+# The formula installs from the darwin/linux archives built above; no formula is
+# published for a `--snapshot` build.
+brews:
+  - name: resilience-demo
+    # Only the demo-server archives feed the formula.
+    ids:
+      - default
+    repository:
+      owner: sanskarpan
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
+    description: "Demo server for the Resilience Go rate-limiting & circuit-breaking toolkit."
+    license: "MIT"
+    # Don't publish the formula for prereleases / snapshots.
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: goreleaser@users.noreply.github.com
+    commit_msg_template: "brew: resilience-demo {{ .Tag }}"
+    test: |
+      system "#{bin}/demo-server", "--version"
+    install: |
+      bin.install "demo-server"
+
 # ─── Changelog ────────────────────────────────────────────────────────────────
 changelog:
   sort: asc

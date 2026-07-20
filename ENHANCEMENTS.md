@@ -669,7 +669,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   scripts unless `redis.replicate_commands()` is used — must handle Redis-version semantics.
 - **References:** Redis `TIME` + `replicate_commands`, Stripe/Shopify GCRA writeups, Google TrueTime.
 
-### 5.2 Additional backends: Memcached, DynamoDB, and gossip/in-cluster
+### 5.2 Additional backends: Memcached, DynamoDB, and gossip/in-cluster  
+> ✅ **Implemented & merged** — new nested `stores/` module (keeps heavy SDKs out of the zero-dep core): `stores/memcached` (CAS-loop atomicity) and `stores/dynamodb` (conditional-write/atomic-counter OCC) implementing `store.Store`, with honest per-backend consistency docs and a gossip/CRDT design sketch in `stores/README.md`.
 - **Category:** Distributed · **Priority:** P2 · **Effort:** L
 - **Rationale:** Redis is the only distributed backend (`ratelimit/store/redis.go`). Teams on
   Memcached, DynamoDB, or those wanting a no-external-dependency in-cluster limiter (gossip)
@@ -769,7 +770,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   asserting identical decisions.
 - **References:** Go fuzzing, differential testing.
 
-### 6.3 Testcontainers for Redis (deterministic integration)
+### 6.3 Testcontainers for Redis (deterministic integration)  
+> ✅ **Implemented & merged** — new nested `integration/` module (keeps testcontainers-go out of core) spinning up a real `redis:7-alpine` and running distributed limiter/breaker parity against the live Lua scripts, with a docker-compose fallback.
 - **Category:** Testing · **Priority:** P2 · **Effort:** S
 - **Rationale:** Integration tests use a **CI service container** (`.github/workflows/ci.yml`
   Redis 7-alpine) and fall back to `localhost:6379`, which makes local runs environment-
@@ -809,7 +811,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   reduce false positives, or run nightly rather than per-PR.
 - **References:** `golang.org/x/perf/cmd/benchstat`, `benchmark-action/github-action-benchmark`.
 
-### 6.6 Mutation testing
+### 6.6 Mutation testing  
+> ✅ **Implemented & merged** — `make mutation` via `go run` go-gremlins (no core dep), `.gremlins.yaml`, `docs/mutation-testing.md`, and a scheduled/dispatch-only `mutation.yml` workflow (never a required PR check).
 - **Category:** Testing · **Priority:** P3 · **Effort:** M
 - **Rationale:** High test *count* doesn't guarantee assertions actually catch faults. Mutation
   testing measures whether tests fail when logic is perturbed.
@@ -819,7 +822,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
 - **Risks/tradeoffs:** Slow; nightly-only.
 - **References:** `go-gremlins/gremlins`, Stryker.
 
-### 6.7 Deterministic simulation / latency injection tests
+### 6.7 Deterministic simulation / latency injection tests  
+> ✅ **Implemented & merged** — `internal/simulation`: a virtual-clock `Sim` harness + `FaultInjector` (deterministic latency/error schedules, seeded) that make breaker trip/recover, retry backoff timing, and bulkhead queue/timeout fully deterministic.
 - **Category:** Testing · **Priority:** P2 · **Effort:** M
 - **Rationale:** The chaos harness tests concurrency, and `ManualClock` gives time determinism,
   but there's no **fault/latency injection** into downstreams to validate breaker+retry+hedge
@@ -938,7 +942,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   scenario, cross-linked from the README. Pairs naturally with §2.4 framework middleware.
 - **References:** Polly docs, resilience4j getting-started recipes.
 
-### 8.3 Hosted docs site
+### 8.3 Hosted docs site  
+> ✅ **Implemented & merged** — MkDocs Material site (`mkdocs.yml` + `docs/index.md`) wiring all existing docs, deployed via `.github/workflows/docs.yml` (`actions/deploy-pages`); Pages enablement is a one-time repo-settings step (noted in-workflow).
 - **Category:** Docs · **Priority:** P2 · **Effort:** M
 - **Rationale:** Docs are markdown-in-repo (`docs/algorithms.md`, `comparison.md`,
   `distributed.md`) plus in-playground pages. A searchable hosted site (with the algorithm
@@ -1044,7 +1049,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Commits, with a CI check that PRs update the changelog.
 - **References:** git-cliff, release-please.
 
-### 9.5 Homebrew tap (and `go install` one-liner) for the demo server
+### 9.5 Homebrew tap (and `go install` one-liner) for the demo server  
+> ✅ **Implemented & merged** — goreleaser `brews:` block publishing `resilience-demo` to `sanskarpan/homebrew-tap`, plus README install docs (`brew install`, `go install .../server@latest`, docker/GHCR); tap repo + token are one-time manual setup.
 - **Category:** Release · **Priority:** P3 · **Effort:** S
 - **Rationale:** The demo server is a useful standalone tool; a `brew install` / documented
   `go install …/server@latest` lowers the try-it barrier.
@@ -1153,7 +1159,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Discussions.
 - **References:** up-for-grabs.net, CNCF contributor ladders.
 
-### 11.3 Blog/talk material & an examples showcase
+### 11.3 Blog/talk material & an examples showcase  
+> ✅ **Implemented & merged** — `docs/blog/` technical articles (zero-dependency resilience; GCRA vs token bucket) + talk outline, grounded in the real ADRs and code.
 - **Category:** Community · **Priority:** P3 · **Effort:** M
 - **Rationale:** The GCRA float64 note (§5.4), the fixed pipeline-order design, the deterministic
   `ManualClock`, and the 59-issue adversarial audit are genuinely interesting write-ups that
@@ -1164,7 +1171,8 @@ the library demonstrably more competitive than the incumbents it's measured agai
   Lua, testing with a fake clock) and a conference-talk outline; link from the README.
 - **References:** the project's own audit trail.
 
-### 11.4 Dedicated examples repo / runnable playground links
+### 11.4 Dedicated examples repo / runnable playground links  
+> ✅ **Implemented & merged** — new runnable examples (`examples/resilience-stack`, `examples/tiered`, `examples/debounce`) + a `docs/examples.md` catalog of all seven examples.
 - **Category:** Community · **Priority:** P3 · **Effort:** S
 - **Rationale:** `examples/` is in-repo; a discoverable set of runnable examples (Go
   playground links where feasible, plus the framework recipes) lowers the trial barrier.

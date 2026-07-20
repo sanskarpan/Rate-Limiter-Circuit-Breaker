@@ -65,6 +65,24 @@ bench-stat: ## Compare two benchstat inputs: make bench-stat BASE=base.txt HEAD=
 vuln: ## Scan for known vulnerabilities (govulncheck)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+# Mutation testing (ENHANCEMENTS §6.6). Uses go-gremlins via `go run` so NO
+# dependency is added to the core go.mod/go.sum. Slow — run locally or nightly,
+# NOT in required PR checks. Config lives in .gremlins.yaml. Targets only the
+# core algorithm packages by default; override with PKG=./retry (etc.).
+#   make mutation              # run on the default algorithm package set
+#   make mutation PKG=./ratelimit/tokenbucket
+# See docs/mutation-testing.md for how to interpret survivors.
+MUTATION_TOOL := github.com/go-gremlins/gremlins/cmd/gremlins@v0.5.0
+PKG ?= ./circuitbreaker/... ./retry/... ./ratelimit/tokenbucket/... ./ratelimit/gcra/... ./ratelimit/fixedwindow/... ./ratelimit/slidingwindow/... ./ratelimit/leakybucket/... ./bulkhead/...
+
+mutation: ## Run mutation testing on core algorithm packages (§6.6, slow; go run, no core dep)
+	@echo "Running mutation testing (go-gremlins) on: $(PKG)"
+	@echo "This is slow. See docs/mutation-testing.md for interpretation."
+	go run $(MUTATION_TOOL) unleash --config .gremlins.yaml $(PKG)
+
+mutation-dry: ## List mutants without running tests (fast sanity check of coverage)
+	go run $(MUTATION_TOOL) unleash --dry-run --config .gremlins.yaml $(PKG)
+
 test-e2e: ## Run Playwright E2E: builds+starts server (:8080) & frontend (:3000), then runs tests
 	@echo "Building demo server..."
 	@CGO_ENABLED=0 go build -o bin/demo-server ./server/
@@ -115,3 +133,6 @@ clean: ## Remove build artifacts
 
 test-contrib: ## Build+test the contrib framework-middleware module
 	cd contrib && go build ./... && go vet ./... && go test -race ./...
+
+test-stores: ## Build+test the stores backend module (memcached, dynamodb)
+	cd stores && go build ./... && go vet ./... && go test -race ./...

@@ -1,0 +1,84 @@
+name: Docs
+
+# Builds the MkDocs site from docs/ and deploys it to GitHub Pages.
+#
+# ONE-TIME MANUAL SETUP (repo maintainer, done once in the GitHub UI):
+#   Settings → Pages → "Build and deployment" → Source: "GitHub Actions".
+# Until that is set, the deploy step below will fail with a Pages-not-enabled
+# error; the build job still validates the site on every push regardless.
+#
+# This workflow is additive — it does not touch ci.yml, bench.yml or release.yml.
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when docs or the site config actually change.
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+# Least-privilege by default; the deploy job elevates what Pages needs.
+permissions:
+  contents: read
+
+# Serialize deploys; never cancel an in-flight production deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ─── Build ────────────────────────────────────────────────────────────────
+  # Builds on every push and PR so broken docs/nav fail fast. Uploads the Pages
+  # artifact only for the eventual deploy.
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs
+        run: pip install mkdocs-material
+
+      # --strict fails the build on broken internal links or nav paths that
+      # don't resolve to a real file, so the site can't drift from docs/.
+      - name: Build (strict)
+        run: mkdocs build --strict
+
+      - name: Upload Pages artifact
+        # Only the main-branch build produces the artifact we deploy.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ─── Deploy ───────────────────────────────────────────────────────────────
+  # Publishes the built artifact to GitHub Pages. Requires the one-time
+  # "Source: GitHub Actions" setting above.
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deploy originates from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

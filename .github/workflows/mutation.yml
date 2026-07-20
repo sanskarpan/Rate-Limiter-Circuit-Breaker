@@ -1,0 +1,63 @@
+name: Mutation testing
+
+# Mutation testing (ENHANCEMENTS.md §6.6).
+#
+# POLICY — NEVER a required PR check. Mutation testing re-runs the whole unit
+# suite once per mutant, so it is far too slow to gate merges. It runs:
+#   • on manual dispatch (workflow_dispatch), optionally scoped to one package;
+#   • on a weekly schedule, to surface newly-introduced survivors.
+# The report is uploaded as an artifact for triage; see docs/mutation-testing.md.
+#
+# It uses go-gremlins via `go run` (see the Makefile `mutation` target), so NO
+# dependency is added to the core go.mod/go.sum.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Go package pattern to mutate (blank = Makefile default set)"
+        required: false
+        default: ""
+  schedule:
+    # 04:23 UTC every Monday (off the hour to dodge runner contention).
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    name: go-gremlins
+    runs-on: ubuntu-latest
+    # Generous cap: mutation testing is inherently slow.
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go (from go.mod)
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run mutation testing
+        run: |
+          set -o pipefail
+          if [ -n "${{ github.event.inputs.packages }}" ]; then
+            make mutation PKG="${{ github.event.inputs.packages }}" 2>&1 | tee mutation-report.txt
+          else
+            make mutation 2>&1 | tee mutation-report.txt
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-report.txt
+          retention-days: 30
