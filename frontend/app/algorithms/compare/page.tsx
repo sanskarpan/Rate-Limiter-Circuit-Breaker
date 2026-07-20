@@ -119,6 +119,8 @@ export default function ComparePage() {
               return (
                 <button
                   key={a.value}
+                  type="button"
+                  aria-pressed={isSelected}
                   onClick={() => toggleAlgo(a.value)}
                   className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
                     isSelected
@@ -142,18 +144,21 @@ export default function ComparePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="min-w-[200px]">
-            <label className="mb-1 block text-xs font-medium text-gray-400">Key</label>
+            <label htmlFor="compare-key" className="mb-1 block text-xs font-medium text-gray-300">Key</label>
             <input
+              id="compare-key"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-400">N (tokens)</label>
+            <label htmlFor="compare-n" className="mb-1 block text-xs font-medium text-gray-300">N (tokens)</label>
             <div className="flex items-center gap-2">
               <input
+                id="compare-n"
                 type="range" min={1} max={10} value={n}
+                aria-valuetext={`${n} tokens`}
                 onChange={(e) => setN(Number(e.target.value))}
                 className="w-24 accent-blue-500"
               />
@@ -161,6 +166,7 @@ export default function ComparePage() {
             </div>
           </div>
           <motion.button
+            type="button"
             whileTap={{ scale: 0.96 }}
             onClick={sendToAll}
             disabled={sending}

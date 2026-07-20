@@ -142,27 +142,30 @@ export default function AlgorithmPage() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-400">
+              <label htmlFor="algo-key" className="mb-1 block text-xs font-medium text-gray-300">
                 Key
               </label>
               <input
+                id="algo-key"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="rate limit key"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-400">
+              <label htmlFor="algo-n" className="mb-1 block text-xs font-medium text-gray-300">
                 N (tokens requested)
               </label>
               <div className="flex items-center gap-3">
                 <input
+                  id="algo-n"
                   type="range"
                   min={1}
                   max={10}
                   value={requestCount}
+                  aria-valuetext={`${requestCount} tokens`}
                   onChange={(e) => setRequestCount(Number(e.target.value))}
                   className="flex-1 accent-blue-500"
                 />
@@ -174,6 +177,7 @@ export default function AlgorithmPage() {
 
             <div className="flex gap-3">
               <motion.button
+                type="button"
                 whileTap={{ scale: 0.96 }}
                 disabled={isLoading}
                 onClick={() => sendRequest(requestCount)}
@@ -184,13 +188,15 @@ export default function AlgorithmPage() {
             </div>
 
             <div className="border-t border-white/10 pt-4">
-              <p className="mb-2 text-xs font-medium text-gray-400">Burst Test</p>
+              <label htmlFor="algo-burst" className="mb-2 block text-xs font-medium text-gray-300">Burst Test</label>
               <div className="flex items-center gap-3">
                 <input
+                  id="algo-burst"
                   type="range"
                   min={2}
                   max={20}
                   value={burstCount}
+                  aria-valuetext={`${burstCount} requests`}
                   onChange={(e) => setBurstCount(Number(e.target.value))}
                   className="flex-1 accent-amber-500"
                 />
@@ -199,6 +205,7 @@ export default function AlgorithmPage() {
                 </span>
               </div>
               <motion.button
+                type="button"
                 whileTap={{ scale: 0.96 }}
                 disabled={isLoading}
                 onClick={sendBurst}

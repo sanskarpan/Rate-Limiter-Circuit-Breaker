@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { allow } from '@/lib/api/client'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
+import { AllowDenyRatioChart } from '@/components/charts/AllowDenyRatioChart'
+import { LatencyHistogram } from '@/components/charts/LatencyHistogram'
 import type { SimResult, SimStats } from '@/lib/api/types'
 
 const ALGORITHMS = [
@@ -38,8 +40,8 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
     purple: 'text-purple-400',
   }
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</p>
+    <div className="rounded-lg border border-white/10 bg-white/5 p-4" role="group" aria-label={`${label}: ${value}`}>
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</p>
       <p className={`mt-1 text-2xl font-bold font-mono ${colorMap[color] ?? 'text-white'}`}>{value}</p>
     </div>
   )
@@ -263,6 +265,7 @@ export default function SimulatePage() {
   const allowedCount = results.filter((r) => r.allowed).length
   const deniedCount = results.filter((r) => !r.allowed).length
   const allowRate = results.length > 0 ? ((allowedCount / results.length) * 100).toFixed(1) : '—'
+  const latencies = results.map((r) => r.latency_ms)
 
   return (
     <div className="space-y-8">
@@ -281,8 +284,9 @@ export default function SimulatePage() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-400">Algorithm</label>
+              <label htmlFor="sim-algorithm" className="mb-1 block text-xs font-medium text-gray-300">Algorithm</label>
               <select
+                id="sim-algorithm"
                 value={config.algorithm}
                 onChange={(e) => setConfig((c) => ({ ...c, algorithm: e.target.value }))}
                 disabled={running}
@@ -295,8 +299,9 @@ export default function SimulatePage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-400">Scenario</label>
+              <label htmlFor="sim-scenario" className="mb-1 block text-xs font-medium text-gray-300">Scenario</label>
               <select
+                id="sim-scenario"
                 value={config.scenario}
                 onChange={(e) => setConfig((c) => ({ ...c, scenario: e.target.value }))}
                 disabled={running}
@@ -312,13 +317,15 @@ export default function SimulatePage() {
             </div>
 
             <div>
-              <label className="mb-1 flex justify-between text-xs font-medium text-gray-400">
+              <label htmlFor="sim-duration" className="mb-1 flex justify-between text-xs font-medium text-gray-300">
                 <span>Duration</span>
                 <span className="font-mono text-white">{config.durationMs / 1000}s</span>
               </label>
               <input
+                id="sim-duration"
                 type="range" min={1000} max={30000} step={1000}
                 value={config.durationMs}
+                aria-valuetext={`${config.durationMs / 1000} seconds`}
                 onChange={(e) => setConfig((c) => ({ ...c, durationMs: Number(e.target.value) }))}
                 disabled={running}
                 className="w-full accent-blue-500"
@@ -326,13 +333,15 @@ export default function SimulatePage() {
             </div>
 
             <div>
-              <label className="mb-1 flex justify-between text-xs font-medium text-gray-400">
+              <label htmlFor="sim-rps" className="mb-1 flex justify-between text-xs font-medium text-gray-300">
                 <span>Target RPS</span>
                 <span className="font-mono text-white">{config.rps}</span>
               </label>
               <input
+                id="sim-rps"
                 type="range" min={1} max={100} step={1}
                 value={config.rps}
+                aria-valuetext={`${config.rps} requests per second`}
                 onChange={(e) => setConfig((c) => ({ ...c, rps: Number(e.target.value) }))}
                 disabled={running}
                 className="w-full accent-blue-500"
@@ -340,13 +349,15 @@ export default function SimulatePage() {
             </div>
 
             <div>
-              <label className="mb-1 flex justify-between text-xs font-medium text-gray-400">
+              <label htmlFor="sim-concurrency" className="mb-1 flex justify-between text-xs font-medium text-gray-300">
                 <span>Concurrency</span>
                 <span className="font-mono text-white">{config.concurrency}</span>
               </label>
               <input
+                id="sim-concurrency"
                 type="range" min={1} max={100} step={1}
                 value={config.concurrency}
+                aria-valuetext={`${config.concurrency} concurrent requests`}
                 onChange={(e) => setConfig((c) => ({ ...c, concurrency: Number(e.target.value) }))}
                 disabled={running}
                 className="w-full accent-purple-500"
@@ -354,8 +365,9 @@ export default function SimulatePage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-400">Key</label>
+              <label htmlFor="sim-key" className="mb-1 block text-xs font-medium text-gray-300">Key</label>
               <input
+                id="sim-key"
                 value={config.key}
                 onChange={(e) => setConfig((c) => ({ ...c, key: e.target.value }))}
                 disabled={running}
@@ -365,6 +377,7 @@ export default function SimulatePage() {
 
             {!running ? (
               <motion.button
+                type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={startSimulation}
                 className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
@@ -373,6 +386,7 @@ export default function SimulatePage() {
               </motion.button>
             ) : (
               <motion.button
+                type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={stopSimulation}
                 className="w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-500"
@@ -387,21 +401,47 @@ export default function SimulatePage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Running indicator */}
           {running && (
-            <div className="flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+            <div
+              className="flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" aria-hidden="true" />
               <span className="text-sm text-blue-300">
                 Simulation running — {results.length} requests sent
               </span>
             </div>
           )}
 
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* Stats grid — live so screen readers hear the streaming totals */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-live="polite">
             <StatCard label="Total" value={results.length} color="blue" />
             <StatCard label="Allowed" value={allowedCount} color="green" />
             <StatCard label="Denied" value={deniedCount} color="red" />
             <StatCard label="Allow Rate" value={`${allowRate}%`} color="amber" />
           </div>
+
+          {/* Rolling allow/deny ratio */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Rolling Allow Rate</CardTitle>
+              <span className="text-xs text-gray-400">last 20-request window</span>
+            </CardHeader>
+            <CardContent>
+              <AllowDenyRatioChart results={results} />
+            </CardContent>
+          </Card>
+
+          {/* Latency distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Latency Distribution</CardTitle>
+              <span className="text-xs text-gray-400">{results.length} samples</span>
+            </CardHeader>
+            <CardContent>
+              <LatencyHistogram latencies={latencies} />
+            </CardContent>
+          </Card>
 
           {/* Final stats */}
           {stats && !running && (

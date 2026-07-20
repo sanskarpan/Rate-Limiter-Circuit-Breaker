@@ -60,8 +60,17 @@ export function TokenBucketViz({ tokens, capacity, lastAllowed }: TokenBucketViz
       <svg
         viewBox={`0 0 ${viewBoxW} ${viewBoxH}`}
         className="w-48 select-none"
-        aria-label="Token bucket visualization"
+        role="img"
+        aria-label={`Token bucket: ${tokens} of ${capacity} tokens available${
+          lastAllowed === false ? ', last request denied' : ''
+        }`}
       >
+        <title>Token bucket visualization</title>
+        <desc>
+          {`The bucket currently holds ${tokens} of ${capacity} tokens (${Math.round(
+            fillRatio * 100,
+          )}% full).`}
+        </desc>
         {/* Glow filter */}
         <defs>
           <filter id="glow">
@@ -183,7 +192,15 @@ export function TokenBucketViz({ tokens, capacity, lastAllowed }: TokenBucketViz
             {tokens} / {capacity}
           </span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+        <div
+          className="h-2 w-full overflow-hidden rounded-full bg-gray-800"
+          role="progressbar"
+          aria-label="Tokens available"
+          aria-valuemin={0}
+          aria-valuemax={capacity}
+          aria-valuenow={tokens}
+          aria-valuetext={`${tokens} of ${capacity} tokens`}
+        >
           <motion.div
             className="h-full rounded-full bg-blue-500"
             style={{ width: `${fillRatio * 100}%` }}
