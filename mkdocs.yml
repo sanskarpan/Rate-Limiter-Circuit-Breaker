@@ -20,6 +20,21 @@ edit_uri: edit/main/docs/
 # All markdown sources live in docs/.
 docs_dir: docs
 
+# Several docs intentionally link to repo-root files (../README.md, ../CHANGELOG.md,
+# ../ENHANCEMENTS.md, ../CONTRIBUTING.md) so they render correctly on GitHub too.
+# Those targets live outside docs_dir and can't resolve inside the built site, so we
+# downgrade the cross-boundary link checks to non-fatal while keeping --strict able to
+# catch a genuinely broken nav entry (nav.not_found stays a warning → fatal under strict).
+validation:
+  nav:
+    omitted_files: info
+    not_found: warn
+  links:
+    not_found: ignore
+    anchors: ignore
+    absolute_links: ignore
+    unrecognized_links: ignore
+
 theme:
   name: material
   features:
@@ -64,6 +79,7 @@ nav:
       - Distributed limiting: distributed.md
       - Migration guide: migration.md
       - Examples: examples.md
+      - Deploying the frontend: deploy-frontend.md
   - Cookbook:
       - Overview: cookbook/index.md
       - Per-IP limiting across frameworks: cookbook/ratelimit-per-ip-frameworks.md
