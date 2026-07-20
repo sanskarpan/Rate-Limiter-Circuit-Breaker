@@ -57,13 +57,13 @@ jobs:
 
       # Multi-arch Docker builds need QEMU (arm64 emulation) + buildx.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Run goreleaser
         id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -95,7 +95,7 @@ jobs:
       # Attest the released binaries (glob over goreleaser's dist/) so consumers
       # can verify build provenance with `gh attestation verify`.
       - name: Attest binary provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/*.tar.gz"
 
@@ -113,7 +113,7 @@ jobs:
           echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
 
       - name: Attest container image provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/sanskarpan/rate-limiter-circuit-breaker
           subject-digest: ${{ steps.image.outputs.digest }}
