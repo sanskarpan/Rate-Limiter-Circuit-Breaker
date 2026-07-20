@@ -65,9 +65,10 @@ var Epoch = time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
 // let a blocked operation goroutine advance after virtual time moves. It is a
 // bounded, wall-clock-free barrier: it never sleeps on the OS clock, so it does
 // not reintroduce timing dependence — it only trades CPU yields for goroutine
-// progress. The value is generous; typical scenarios settle in a handful of
-// yields.
-const settleSpins = 256
+// progress. 4096 spins (~400µs on an unloaded core) provides enough slack for
+// the race detector and resource-constrained CI runners (e.g. when a Redis
+// sidecar is also running) without introducing wall-clock non-determinism.
+const settleSpins = 4096
 
 // Sim is a deterministic simulation harness backed by a virtual clock.
 //
