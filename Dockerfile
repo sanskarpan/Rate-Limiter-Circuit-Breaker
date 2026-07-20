@@ -7,20 +7,27 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
-# Copy dependency files first for layer caching
+# The demo server lives in its own nested Go module (server/) whose go.mod has
+# `replace github.com/sanskarpan/Rate-Limiter-Circuit-Breaker => ../`, so the
+# parent (library) module MUST also be present in the image for the build to
+# resolve. Copy both modules' dependency manifests first for layer caching, then
+# download the server module's deps from within server/.
 COPY go.mod go.sum ./
-RUN go mod download
+COPY server/go.mod server/go.sum ./server/
+RUN cd server && go mod download
 
-# Copy source code
+# Copy the full source tree (parent library module + nested server module).
 COPY . .
 
-# Build the binary with CGO disabled and stripped symbols
+# Build the binary from the server module (WORKDIR /build/server); the replace
+# directive resolves the library at ../. The version package import path is
+# unchanged by the module split.
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
     -ldflags="-s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version=${VERSION}" \
     -o /build/demo-server \
-    ./server/
+    .
 
 # ─── Stage 2: distroless runtime ─────────────────────────────────────────────
 FROM gcr.io/distroless/static:nonroot AS runtime

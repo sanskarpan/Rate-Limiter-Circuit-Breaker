@@ -16,16 +16,27 @@ project_name: resilience-demo
 
 before:
   hooks:
-    - go mod download
+    # The demo server lives in its own nested module (server/) so the root
+    # library module stays lean (no gorilla/websocket, etc.). Download that
+    # module's deps from within its directory. (Global before.hooks take a
+    # plain command string, so cd into the module first.)
+    - go -C server mod download
 
 builds:
   - id: demo-server
     binary: demo-server
-    main: ./server
+    # Build the nested server module. `dir` runs the compiler with server/ as
+    # the working directory, and `main: .` targets that module's root package.
+    # The replace directive in server/go.mod resolves the library at ../.
+    dir: server
+    main: .
     env:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+    # The version package's import path is unchanged by the module split
+    # (it is still github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version),
+    # so this ldflags string stays exactly the same.
     ldflags:
       - -s -w -X github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/server/version.Version={{ .Version }}
     goos:

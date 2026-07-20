@@ -8,8 +8,8 @@ LDFLAGS := -ldflags="-s -w -X $(MODULE)/server/version.Version=$(VERSION)"
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build-go: ## Build the demo server binary
-	CGO_ENABLED=0 go build $(LDFLAGS) -o bin/demo-server ./server/
+build-go: ## Build the demo server binary (nested server/ module)
+	cd server && CGO_ENABLED=0 go build $(LDFLAGS) -o ../bin/demo-server .
 
 test: ## Run all tests with coverage
 	go test -coverprofile=coverage.out ./...
@@ -33,9 +33,9 @@ fuzz: ## Run fuzz tests (30s each)
 	done
 
 fuzz-server: ## Fuzz the demo server's JSON decoders & simulator (§7.5, 15s each)
-	@for target in FuzzHandleAllow FuzzHandleCBExecute FuzzHandleSimulate FuzzClampSimulateRequest; do \
+	@cd server && for target in FuzzHandleAllow FuzzHandleCBExecute FuzzHandleSimulate FuzzClampSimulateRequest; do \
 		echo "Fuzzing $$target..."; \
-		go test -run=xxx -fuzz=$$target$$ -fuzztime=15s ./server/api/ || exit 1; \
+		go test -run=xxx -fuzz=$$target$$ -fuzztime=15s ./api/ || exit 1; \
 	done
 
 bench: ## Run all benchmarks
@@ -85,7 +85,7 @@ mutation-dry: ## List mutants without running tests (fast sanity check of covera
 
 test-e2e: ## Run Playwright E2E: builds+starts server (:8080) & frontend (:3000), then runs tests
 	@echo "Building demo server..."
-	@CGO_ENABLED=0 go build -o bin/demo-server ./server/
+	@cd server && CGO_ENABLED=0 go build -o ../bin/demo-server .
 	@echo "Starting demo server on :8080..."
 	@./bin/demo-server > /tmp/demo-server.log 2>&1 & echo $$! > /tmp/demo-server.pid
 	@for i in $$(seq 1 60); do curl -fsS http://localhost:8080/health/live >/dev/null 2>&1 && break; sleep 1; done
@@ -136,3 +136,6 @@ test-contrib: ## Build+test the contrib framework-middleware module
 
 test-stores: ## Build+test the stores backend module (memcached, dynamodb)
 	cd stores && go build ./... && go vet ./... && go test -race ./...
+
+test-server-mod: ## Build+test the demo server module (nested server/ module)
+	cd server && go build ./... && go vet ./... && go test -race ./...
