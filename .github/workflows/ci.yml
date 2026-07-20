@@ -304,6 +304,9 @@ jobs:
       - name: Lint
         run: npx eslint . --ignore-pattern e2e
 
+      - name: Unit tests (Vitest)
+        run: npm run test:unit
+
       - name: Build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8080
