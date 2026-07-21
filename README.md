@@ -521,10 +521,10 @@ docker-compose up    # demo server + Redis + Prometheus + Grafana
 
 ## API stability
 
-This project follows [Semantic Versioning](https://semver.org/). While the
-module is pre-1.0, minor releases may contain breaking API changes; pin a
-version in your `go.mod` for reproducible builds. Anything under `internal/` is
-not part of the public API and may change at any time.
+This project follows [Semantic Versioning](https://semver.org/). From **v1.0.0** the public API
+is stable — no breaking changes within a major version. Anything under `internal/` carries no
+compatibility guarantee and may change at any time. See [docs/STABILITY.md](docs/STABILITY.md)
+for the full stability policy and deprecation process.
 
 ## License
 

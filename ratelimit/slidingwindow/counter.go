@@ -70,12 +70,12 @@ type SlidingWindowCounter struct {
 // CounterOption configures a SlidingWindowCounter.
 type CounterOption func(*SlidingWindowCounter)
 
-// WithCounterOnDecision registers a hook fired after every Allow/AllowN
+// WithOnDecision registers a hook fired after every Allow/AllowN
 // decision (both allow and deny), receiving the key and the resulting Result.
 // The default is nil (a cheap no-op guarded by a nil check on the hot path).
 // The hook runs synchronously on the calling goroutine before the decision is
 // returned, so keep it fast and non-blocking. A nil hook is ignored.
-func WithCounterOnDecision(fn func(key string, r ratelimit.Result)) CounterOption {
+func WithOnDecision(fn func(key string, r ratelimit.Result)) CounterOption {
 	return func(swc *SlidingWindowCounter) {
 		if fn != nil {
 			swc.onDecision = fn
@@ -83,21 +83,30 @@ func WithCounterOnDecision(fn func(key string, r ratelimit.Result)) CounterOptio
 	}
 }
 
-// WithCounterClock sets the clock for testing.
-func WithCounterClock(c clock.Clock) CounterOption {
+// WithClock sets the clock for testing.
+func WithClock(c clock.Clock) CounterOption {
 	return func(swc *SlidingWindowCounter) { swc.clock = c }
 }
 
-// WithCounterRecorder wires a metric.Recorder so allow/deny decisions and
+// WithRecorder wires a metric.Recorder so allow/deny decisions and
 // decision latency are emitted. Defaults to metric.Default() (a no-op) when
 // unset. A nil recorder is ignored.
-func WithCounterRecorder(rec metric.Recorder) CounterOption {
+func WithRecorder(rec metric.Recorder) CounterOption {
 	return func(swc *SlidingWindowCounter) {
 		if rec != nil {
 			swc.rec = rec
 		}
 	}
 }
+
+// Deprecated: Use WithOnDecision instead.
+var WithCounterOnDecision = WithOnDecision
+
+// Deprecated: Use WithClock instead.
+var WithCounterClock = WithClock
+
+// Deprecated: Use WithRecorder instead.
+var WithCounterRecorder = WithRecorder
 
 // NewCounter creates a SlidingWindowCounter allowing limit requests per window.
 //

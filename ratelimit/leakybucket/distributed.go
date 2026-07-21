@@ -11,7 +11,7 @@ import (
 
 // DistributedLeakyBucket is a Redis-backed leaky bucket (ENHANCEMENTS §1.8).
 //
-// It uses the store.LeakyBucketScript Lua script for an atomic read-check-store
+// It uses the store.LeakyBucketScriptID Lua script for an atomic read-check-store
 // of the bucket's TAT, exploiting the leaky-bucket ⇄ GCRA duality: a request is
 // admitted only when the virtual queue would not exceed `capacity` pending
 // slots, and the queue drains one slot every emission interval (1/leakRate).
@@ -40,17 +40,18 @@ type DistributedLeakyBucket struct {
 // DistributedOption configures a distributed leaky bucket.
 type DistributedOption func(*DistributedLeakyBucket)
 
-// WithDistributedServerTime forces server-time mode on (true) or off (false),
+// WithServerTime forces server-time mode on (true) or off (false),
 // overriding whatever the underlying store reports via ServerTimeMode(). In
 // server-time mode the Lua script uses Redis's TIME command as the authoritative
 // clock so application clock skew across a fleet cannot corrupt the decision.
-func WithDistributedServerTime(on bool) DistributedOption {
+func WithServerTime(on bool) DistributedOption {
 	return func(d *DistributedLeakyBucket) { d.useServerTime = on }
 }
 
-// serverTimeCapable is satisfied by stores that expose whether server-time mode
-// is enabled (both *store.Redis and *store.Memory do).
-type serverTimeCapable interface{ ServerTimeMode() bool }
+// WithDistributedServerTime is a deprecated alias for WithServerTime.
+//
+// Deprecated: Use WithServerTime instead.
+var WithDistributedServerTime = WithServerTime
 
 // NewDistributed creates a Redis-backed leaky bucket.
 // capacity is the queue depth and leakRate is the constant drain rate in
@@ -59,7 +60,7 @@ type serverTimeCapable interface{ ServerTimeMode() bool }
 // bucket that never drains.
 //
 // By default it inherits server-time mode from the store
-// (store.RedisOptions.UseServerTime); pass WithDistributedServerTime(true|false)
+// (store.RedisOptions.UseServerTime); pass WithServerTime(true|false)
 // to override.
 func NewDistributed(capacity int, leakRate float64, s store.Store, prefix string, opts ...DistributedOption) *DistributedLeakyBucket {
 	if capacity <= 0 {
@@ -78,7 +79,7 @@ func NewDistributed(capacity int, leakRate float64, s store.Store, prefix string
 		prefix:           prefix,
 		store:            s,
 	}
-	if stc, ok := s.(serverTimeCapable); ok {
+	if stc, ok := s.(store.ServerTimeable); ok {
 		d.useServerTime = stc.ServerTimeMode()
 	}
 	for _, opt := range opts {
@@ -129,7 +130,7 @@ func (d *DistributedLeakyBucket) AllowN(ctx context.Context, key string, n int) 
 		ttlMs = 1000
 	}
 
-	result, err := d.store.Eval(ctx, store.LeakyBucketScript,
+	result, err := d.store.Eval(ctx, store.LeakyBucketScriptID,
 		[]string{d.redisKey(key)},
 		int64(d.emissionInterval), d.capacity, n, nowNs, ttlMs, d.serverTimeArg(),
 	)

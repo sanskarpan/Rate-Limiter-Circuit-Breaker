@@ -27,10 +27,23 @@ notes from the commits since the previous tag.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [1.0.0] - 2026-07-21
+
+### Added
+
 - Prometheus recording & alerting rules under `deploy/prometheus/`
   (`rules.yml`, `alerts.yml`) covering rate-limit denial ratio, circuit-breaker
   stuck-open, bulkhead saturation, and decision-latency SLOs, plus a `README.md`
   documenting how to load them and wire Alertmanager.
+
+### Changed
+
+- The public API is now stable under [Semantic Versioning](https://semver.org/) v1.0.0.
+  No breaking changes will be made within the v1.x major version.
 
 ## [0.1.0] - 2026-07-17
 
@@ -84,5 +97,6 @@ notes from the commits since the previous tag.
 - Circuit Breaker (closed): 82 ns/op, 0 allocs
 - All core packages: zero external runtime dependencies
 
-[Unreleased]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/releases/tag/v0.1.0

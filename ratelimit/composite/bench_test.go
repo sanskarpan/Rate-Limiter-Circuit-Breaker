@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
@@ -15,7 +16,7 @@ import (
 func BenchmarkComposite_AND_Allow_SingleKey(b *testing.B) {
 	tb1 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
 	tb2 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
-	c := composite.New(composite.AND, tb1, tb2).WithClock(clock.RealClock{})
+	c := composite.New(composite.AND, []ratelimit.Limiter{tb1, tb2}, composite.WithClock(clock.RealClock{}))
 	defer c.Close()
 	ctx := context.Background()
 
@@ -31,7 +32,7 @@ func BenchmarkComposite_AND_Allow_SingleKey(b *testing.B) {
 func BenchmarkComposite_AND_Allow_100Keys(b *testing.B) {
 	tb1 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
 	tb2 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
-	c := composite.New(composite.AND, tb1, tb2).WithClock(clock.RealClock{})
+	c := composite.New(composite.AND, []ratelimit.Limiter{tb1, tb2}, composite.WithClock(clock.RealClock{}))
 	defer c.Close()
 	ctx := context.Background()
 	keys := make([]string, 100)
@@ -51,7 +52,7 @@ func BenchmarkComposite_AND_Allow_100Keys(b *testing.B) {
 func BenchmarkComposite_OR_Allow_SingleKey(b *testing.B) {
 	tb1 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
 	tb2 := tokenbucket.New(1e9, 1e9, tokenbucket.WithClock(clock.RealClock{}))
-	c := composite.New(composite.OR, tb1, tb2).WithClock(clock.RealClock{})
+	c := composite.New(composite.OR, []ratelimit.Limiter{tb1, tb2}, composite.WithClock(clock.RealClock{}))
 	defer c.Close()
 	ctx := context.Background()
 

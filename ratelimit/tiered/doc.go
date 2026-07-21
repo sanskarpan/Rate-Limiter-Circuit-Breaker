@@ -11,9 +11,11 @@
 // to least specific, for example:
 //
 //	limiter := tiered.New(
-//	    tiered.Tier{Name: "user",   KeyFunc: tiered.KeyAs("user"),   Limiter: userLimiter},
-//	    tiered.Tier{Name: "tenant", KeyFunc: tiered.TenantOf,        Limiter: tenantLimiter},
-//	    tiered.Tier{Name: "global", KeyFunc: tiered.Constant("all"), Limiter: globalLimiter},
+//	    []tiered.Tier{
+//	        {Name: "user",   KeyFunc: nil,                    Limiter: userLimiter},
+//	        {Name: "tenant", KeyFunc: tiered.Prefix(":"),     Limiter: tenantLimiter},
+//	        {Name: "global", KeyFunc: tiered.Constant("all"), Limiter: globalLimiter},
+//	    },
 //	)
 //	res := limiter.Allow(ctx, "acme:alice")
 //

@@ -12,14 +12,16 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 )
 
-// CBUnaryServerInterceptor returns a gRPC unary server interceptor that wraps
-// requests with the given circuit breaker.
+// UnaryServerInterceptor returns a gRPC unary server interceptor that wraps
+// requests with the given circuit breaker. cb may be a
+// *circuitbreaker.CircuitBreaker or a *circuitbreaker.DistributedCircuitBreaker
+// (both satisfy circuitbreaker.Executor).
 //
 // When the circuit is open: returns codes.Unavailable.
 // When the downstream handler returns a gRPC error with code >= Internal: counts as CB failure.
 // When the downstream handler returns a non-gRPC error: counts as CB failure.
 // Client errors (NotFound, InvalidArgument, etc.) pass through without tripping the circuit.
-func CBUnaryServerInterceptor(cb *circuitbreaker.CircuitBreaker) grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor(cb circuitbreaker.Executor) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		var resp any
 		var handlerErr error // captured from the handler, passed through if not a CB failure
@@ -55,9 +57,16 @@ func CBUnaryServerInterceptor(cb *circuitbreaker.CircuitBreaker) grpc.UnaryServe
 	}
 }
 
-// CBStreamServerInterceptor returns a gRPC stream server interceptor that wraps
-// streams with the given circuit breaker.
-func CBStreamServerInterceptor(cb *circuitbreaker.CircuitBreaker) grpc.StreamServerInterceptor {
+// CBUnaryServerInterceptor is a deprecated alias for UnaryServerInterceptor.
+//
+// Deprecated: Use UnaryServerInterceptor instead.
+var CBUnaryServerInterceptor = UnaryServerInterceptor
+
+// StreamServerInterceptor returns a gRPC stream server interceptor that wraps
+// streams with the given circuit breaker. cb may be a
+// *circuitbreaker.CircuitBreaker or a *circuitbreaker.DistributedCircuitBreaker
+// (both satisfy circuitbreaker.Executor).
+func StreamServerInterceptor(cb circuitbreaker.Executor) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		var handlerErr error
 
@@ -86,6 +95,11 @@ func CBStreamServerInterceptor(cb *circuitbreaker.CircuitBreaker) grpc.StreamSer
 		return nil
 	}
 }
+
+// CBStreamServerInterceptor is a deprecated alias for StreamServerInterceptor.
+//
+// Deprecated: Use StreamServerInterceptor instead.
+var CBStreamServerInterceptor = StreamServerInterceptor
 
 // isCBFailure returns true if the error should count as a circuit breaker failure.
 // gRPC codes that are considered server failures: Internal, Unavailable, DataLoss, Unknown.

@@ -13,21 +13,29 @@ import (
 type decorrelatedJitter struct {
 	base time.Duration
 	cap  time.Duration
-	mu   sync.Mutex // guards rng and prev for concurrent use
-	rng  *rand.Rand
+	mu   sync.Mutex // guards prev and the optional caller-supplied rng
 	prev time.Duration
+	rng  *rand.Rand // nil means: use package-level rand
 }
 
 // Decorrelated returns a BackoffStrategy using the AWS decorrelated jitter formula.
 // Each delay is min(cap, random(base, prev*3)) where prev starts at base.
-// rng must not be nil.
-func Decorrelated(base, cap time.Duration, rng *rand.Rand) BackoffStrategy {
-	return &decorrelatedJitter{
+//
+// rng is optional: pass a *rand.Rand to use a deterministic or isolated source
+// (useful in tests and for reproducible behaviour). Omit it (or pass nil) to
+// use the auto-seeded package-level source, which is goroutine-safe since
+// Go 1.20. When a non-nil rng is supplied it is accessed under the strategy's
+// internal mutex so the returned strategy is safe for concurrent use.
+func Decorrelated(base, cap time.Duration, rng ...*rand.Rand) BackoffStrategy {
+	d := &decorrelatedJitter{
 		base: base,
 		cap:  cap,
-		rng:  rng,
 		prev: base, // initial previous = base per the AWS formula
 	}
+	if len(rng) > 0 {
+		d.rng = rng[0]
+	}
+	return d
 }
 
 // Next computes min(cap, random(base, prev*3)) and stores result as new prev.
@@ -53,9 +61,15 @@ func (d *decorrelatedJitter) Next(_ int) time.Duration {
 		return sleep
 	}
 
-	// random in [lower, upper)
+	// random in [lower, upper) — d.mu already held, so access d.rng directly.
 	spread := int64(upper - lower)
-	sleep := lower + time.Duration(d.rng.Int63n(spread))
+	var jitter int64
+	if d.rng != nil {
+		jitter = d.rng.Int63n(spread) // d.mu protects d.rng from concurrent access
+	} else {
+		jitter = rand.Int63n(spread) // package-level source is goroutine-safe
+	}
+	sleep := lower + time.Duration(jitter)
 
 	// final cap guard
 	if sleep > d.cap {

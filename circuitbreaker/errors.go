@@ -18,50 +18,60 @@ var ErrTooManyRequests = errors.New("circuit breaker: too many requests in half-
 // before the breaker will admit its next probe.
 //
 // CircuitError implements errors.Is against the ErrCircuitOpen and
-// ErrTooManyRequests sentinels (via the wrapped Err) and errors.As so callers
-// can recover the full struct:
+// ErrTooManyRequests sentinels (via the wrapped sentinel error) and errors.As
+// so callers can recover the full struct:
 //
 //	var ce *circuitbreaker.CircuitError
 //	if errors.As(err, &ce) {
 //		log.Printf("rejected by %s in state %s, retry after %s",
-//			ce.GetName(), ce.CircuitState(), ce.RetryAfter())
+//			ce.Name, ce.CircuitState(), ce.RetryAfter())
 //	}
 //
-// Prefer the IsOpen / IsTooManyRequests predicates for simple classification.
+// The wrapped sentinel is intentionally unexported; use errors.Is/As/Unwrap
+// to inspect it. Prefer the IsOpen / IsTooManyRequests predicates for simple
+// classification.
 type CircuitError struct {
 	// Name is the circuit breaker's name.
 	Name string
 	// State is the breaker state observed at the moment of rejection.
 	State State
 	// TimeUntilHalfOpen is the estimated duration until the open circuit will
-	// next admit a half-open probe. It is only meaningful when Err is
-	// ErrCircuitOpen (State == StateOpen); it is zero otherwise and may be zero
-	// for an open circuit whose OpenTimeout has already elapsed.
+	// next admit a half-open probe. It is only meaningful when the wrapped
+	// sentinel is ErrCircuitOpen (State == StateOpen); it is zero otherwise and
+	// may be zero for an open circuit whose OpenTimeout has already elapsed.
 	TimeUntilHalfOpen time.Duration
-	// Err is the wrapped sentinel (ErrCircuitOpen or ErrTooManyRequests).
-	Err error
+	// err is the wrapped sentinel (ErrCircuitOpen or ErrTooManyRequests).
+	// Unexported to prevent external mutation; access via Unwrap/errors.Is/As.
+	err error
+}
+
+// newCircuitError constructs a *CircuitError for internal use.
+func newCircuitError(name string, state State, timeUntilHalfOpen time.Duration, err error) *CircuitError {
+	return &CircuitError{Name: name, State: state, TimeUntilHalfOpen: timeUntilHalfOpen, err: err}
+}
+
+// NewCircuitError constructs a *CircuitError. This is the public constructor
+// callers and tests should use when they need to build a CircuitError directly,
+// since the internal err field is unexported.
+func NewCircuitError(name string, state State, timeUntilHalfOpen time.Duration, err error) *CircuitError {
+	return newCircuitError(name, state, timeUntilHalfOpen, err)
 }
 
 // Error implements the error interface.
 func (e *CircuitError) Error() string {
-	return e.Err.Error() + " [circuit=" + e.Name + ", state=" + e.State.String() + "]"
+	return e.err.Error() + " [circuit=" + e.Name + ", state=" + e.State.String() + "]"
 }
 
 // Is reports whether target is one of the circuit breaker sentinels wrapped by
 // this error. This keeps errors.Is(err, ErrCircuitOpen) and
-// errors.Is(err, ErrTooManyRequests) working against the concrete Err.
+// errors.Is(err, ErrTooManyRequests) working against the concrete sentinel.
 func (e *CircuitError) Is(target error) bool {
-	return target == e.Err
+	return target == e.err
 }
 
 // Unwrap returns the wrapped sentinel error so errors.Is/As traverse the chain.
 func (e *CircuitError) Unwrap() error {
-	return e.Err
-}
-
-// GetName returns the name of the circuit breaker that produced the rejection.
-func (e *CircuitError) GetName() string {
-	return e.Name
+	return e.err
 }
 
 // CircuitState returns the breaker state observed at the moment of rejection.

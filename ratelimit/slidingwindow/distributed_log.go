@@ -9,6 +9,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+// distributedLogAlgorithmName is the algorithm label emitted in Result fields.
+const distributedLogAlgorithmName = "distributed_sliding_window_log"
+
 
 // DistributedSlidingWindowLog is a Redis sorted set-backed sliding window log.
 // Uses ZADD + ZCOUNT + ZREMRANGEBYSCORE in a Lua script for atomicity.
@@ -39,10 +42,6 @@ func WithServerTime(on bool) DistributedLogOption {
 	return func(d *DistributedSlidingWindowLog) { d.useServerTime = on }
 }
 
-// serverTimeCapable is satisfied by stores that expose whether server-time mode
-// is enabled (both *store.Redis and *store.Memory do).
-type serverTimeCapable interface{ ServerTimeMode() bool }
-
 // NewDistributedLog creates a Redis-backed sliding window log.
 //
 // By default it inherits server-time mode from the store; pass
@@ -57,7 +56,7 @@ func NewDistributedLog(limit int, window time.Duration, s store.Store, prefix st
 		prefix: prefix,
 		store:  s,
 	}
-	if stc, ok := s.(serverTimeCapable); ok {
+	if stc, ok := s.(store.ServerTimeable); ok {
 		d.useServerTime = stc.ServerTimeMode()
 	}
 	for _, opt := range opts {
@@ -86,10 +85,10 @@ func (d *DistributedSlidingWindowLog) Allow(ctx context.Context, key string) rat
 func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
 	// Validate inputs to match the local SlidingWindowLog (reject bad keys / n<1).
 	if err := ratelimit.ValidateKey(key); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_sliding_window_log"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedLogAlgorithmName}
 	}
 	if err := ratelimit.ValidateN(n); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_sliding_window_log"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedLogAlgorithmName}
 	}
 
 	now := time.Now()
@@ -102,7 +101,7 @@ func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n 
 	// n or none and deny on count+n>limit (H-1).
 	entryID := fmt.Sprintf("%d-%d", nowNs, d.seq.Add(1))
 
-	result, err := d.store.Eval(ctx, store.SlidingWindowLogScript,
+	result, err := d.store.Eval(ctx, store.SlidingWindowLogScriptID,
 		[]string{d.redisKey(key)},
 		d.limit, int64(d.window), nowNs, entryID, ttlMs, n, d.serverTimeArg(),
 	)
@@ -110,7 +109,7 @@ func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_sliding_window_log",
+			Algorithm: distributedLogAlgorithmName,
 		}
 	}
 
@@ -119,7 +118,7 @@ func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_sliding_window_log",
+			Algorithm: distributedLogAlgorithmName,
 		}
 	}
 
@@ -137,7 +136,7 @@ func (d *DistributedSlidingWindowLog) AllowN(ctx context.Context, key string, n 
 		Limit:      d.limit,
 		Remaining:  remaining,
 		RetryAfter: time.Duration(retryAfterNs),
-		Algorithm:  "distributed_sliding_window_log",
+		Algorithm:  distributedLogAlgorithmName,
 	}
 }
 
@@ -174,7 +173,7 @@ func (d *DistributedSlidingWindowLog) WaitN(ctx context.Context, key string, n i
 func (d *DistributedSlidingWindowLog) Peek(ctx context.Context, key string) ratelimit.State {
 	return ratelimit.State{
 		Key:       key,
-		Algorithm: "distributed_sliding_window_log",
+		Algorithm: distributedLogAlgorithmName,
 		Limit:     d.limit,
 	}
 }

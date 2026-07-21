@@ -8,6 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+// distributedAlgorithmName is the algorithm label emitted in Result fields.
+const distributedAlgorithmName = "distributed_token_bucket"
+
 
 // DistributedTokenBucket is a Redis-backed token bucket.
 // It uses a Lua script for atomic read-refill-consume operations.
@@ -34,10 +37,6 @@ func WithServerTime(on bool) DistributedOption {
 	return func(d *DistributedTokenBucket) { d.useServerTime = on }
 }
 
-// serverTimeCapable is satisfied by stores that expose whether server-time mode
-// is enabled (both *store.Redis and *store.Memory do).
-type serverTimeCapable interface{ ServerTimeMode() bool }
-
 // NewDistributed creates a Redis-backed token bucket.
 // rate is tokens per second, capacity is the maximum burst size.
 //
@@ -53,7 +52,7 @@ func NewDistributed(rate, capacity float64, s store.Store, prefix string, opts .
 		prefix:     prefix,
 		store:      s,
 	}
-	if stc, ok := s.(serverTimeCapable); ok {
+	if stc, ok := s.(store.ServerTimeable); ok {
 		d.useServerTime = stc.ServerTimeMode()
 	}
 	for _, opt := range opts {
@@ -85,10 +84,10 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 	// allowing an n=0 no-op or refunding on n<0, and never forward an unvalidated
 	// key into Redis.
 	if err := ratelimit.ValidateKey(key); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: int(d.capacity), Algorithm: "distributed_token_bucket"}
+		return ratelimit.Result{Allowed: false, Limit: int(d.capacity), Algorithm: distributedAlgorithmName}
 	}
 	if err := ratelimit.ValidateN(n); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: int(d.capacity), Algorithm: "distributed_token_bucket"}
+		return ratelimit.Result{Allowed: false, Limit: int(d.capacity), Algorithm: distributedAlgorithmName}
 	}
 
 	nowNs := time.Now().UnixNano()
@@ -96,7 +95,7 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 	// into the script's PEXPIRE (L-1/TB-2) instead of being computed and discarded.
 	ttlMs := int64(d.capacity/d.refillRate/float64(time.Millisecond)) + 1000
 
-	result, err := d.store.Eval(ctx, store.TokenBucketScript,
+	result, err := d.store.Eval(ctx, store.TokenBucketScriptID,
 		[]string{d.redisKey(key)},
 		d.capacity, d.refillRate, n, nowNs, ttlMs, d.serverTimeArg(),
 	)
@@ -105,7 +104,7 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     int(d.capacity),
-			Algorithm: "distributed_token_bucket",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 
@@ -114,7 +113,7 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     int(d.capacity),
-			Algorithm: "distributed_token_bucket",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 
@@ -125,7 +124,7 @@ func (d *DistributedTokenBucket) AllowN(ctx context.Context, key string, n int) 
 		Allowed:   allowed == 1,
 		Limit:     int(d.capacity),
 		Remaining: int(remaining),
-		Algorithm: "distributed_token_bucket",
+		Algorithm: distributedAlgorithmName,
 	}
 }
 
@@ -160,7 +159,7 @@ func (d *DistributedTokenBucket) WaitN(ctx context.Context, key string, n int) e
 func (d *DistributedTokenBucket) Peek(ctx context.Context, key string) ratelimit.State {
 	return ratelimit.State{
 		Key:       key,
-		Algorithm: "distributed_token_bucket",
+		Algorithm: distributedAlgorithmName,
 		Limit:     int(d.capacity),
 	}
 }

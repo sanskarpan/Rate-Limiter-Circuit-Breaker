@@ -8,6 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+// distributedAlgorithmName is the algorithm label emitted in Result fields.
+const distributedAlgorithmName = "distributed_gcra"
+
 
 // DistributedGCRA is a Redis-backed GCRA (Generic Cell Rate Algorithm) limiter.
 // Uses the Lua GCRAScript for atomic TAT updates.
@@ -34,10 +37,6 @@ func WithServerTime(on bool) DistributedOption {
 	return func(d *DistributedGCRA) { d.useServerTime = on }
 }
 
-// serverTimeCapable is satisfied by stores that expose whether server-time mode
-// is enabled (both *store.Redis and *store.Memory do).
-type serverTimeCapable interface{ ServerTimeMode() bool }
-
 // NewDistributed creates a Redis-backed GCRA limiter.
 // rate is requests per second, burst is the allowed burst size.
 //
@@ -53,7 +52,7 @@ func NewDistributed(rate float64, burst int, s store.Store, prefix string, opts 
 		prefix:           prefix,
 		store:            s,
 	}
-	if stc, ok := s.(serverTimeCapable); ok {
+	if stc, ok := s.(store.ServerTimeable); ok {
 		d.useServerTime = stc.ServerTimeMode()
 	}
 	for _, opt := range opts {
@@ -84,13 +83,13 @@ func (d *DistributedGCRA) AllowN(ctx context.Context, key string, n int) ratelim
 	// reject empty/injection keys, n < 1, and n exceeding the burst ceiling
 	// (which can never be satisfied) instead of forwarding them to Redis.
 	if err := ratelimit.ValidateKey(key); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.burst, Algorithm: "distributed_gcra"}
+		return ratelimit.Result{Allowed: false, Limit: d.burst, Algorithm: distributedAlgorithmName}
 	}
 	if err := ratelimit.ValidateN(n); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.burst, Algorithm: "distributed_gcra"}
+		return ratelimit.Result{Allowed: false, Limit: d.burst, Algorithm: distributedAlgorithmName}
 	}
 	if n > d.burst {
-		return ratelimit.Result{Allowed: false, Limit: d.burst, Remaining: 0, Algorithm: "distributed_gcra"}
+		return ratelimit.Result{Allowed: false, Limit: d.burst, Remaining: 0, Algorithm: distributedAlgorithmName}
 	}
 
 	nowNs := time.Now().UnixNano()
@@ -99,14 +98,14 @@ func (d *DistributedGCRA) AllowN(ctx context.Context, key string, n int) ratelim
 		ttlMs = 1000
 	}
 
-	result, err := d.store.Eval(ctx, store.GCRAScript,
+	result, err := d.store.Eval(ctx, store.GCRAScriptID,
 		[]string{d.redisKey(key)},
 		int64(d.emissionInterval), d.burst, n, nowNs, ttlMs, d.serverTimeArg(),
 	)
 	if err != nil {
 		return ratelimit.Result{
 			Allowed:   false,
-			Algorithm: "distributed_gcra",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 
@@ -114,7 +113,7 @@ func (d *DistributedGCRA) AllowN(ctx context.Context, key string, n int) ratelim
 	if !ok || len(arr) < 2 {
 		return ratelimit.Result{
 			Allowed:   false,
-			Algorithm: "distributed_gcra",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 
@@ -123,7 +122,7 @@ func (d *DistributedGCRA) AllowN(ctx context.Context, key string, n int) ratelim
 
 	return ratelimit.Result{
 		Allowed:    allowed == 1,
-		Algorithm:  "distributed_gcra",
+		Algorithm:  distributedAlgorithmName,
 		RetryAfter: time.Duration(retryAfterNs),
 	}
 }
@@ -161,7 +160,7 @@ func (d *DistributedGCRA) WaitN(ctx context.Context, key string, n int) error {
 func (d *DistributedGCRA) Peek(ctx context.Context, key string) ratelimit.State {
 	return ratelimit.State{
 		Key:       key,
-		Algorithm: "distributed_gcra",
+		Algorithm: distributedAlgorithmName,
 	}
 }
 

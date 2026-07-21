@@ -7,7 +7,26 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/clock"
 )
+
+// atomicClock is a minimal clock.Clock for tests that need a deterministically
+// controllable time source. Only Now() advances (via Add); all other methods
+// delegate to clock.RealClock so the bulkhead timer still fires in real time.
+type atomicClock struct {
+	clock.RealClock
+	ns atomic.Int64
+}
+
+func newAtomicClock(start time.Time) *atomicClock {
+	c := &atomicClock{}
+	c.ns.Store(start.UnixNano())
+	return c
+}
+
+func (c *atomicClock) Now() time.Time { return time.Unix(0, c.ns.Load()) }
+func (c *atomicClock) Add(d time.Duration) { c.ns.Add(int64(d)) }
 
 // waitForInt polls fn until it returns want or the deadline elapses. It returns
 // the last observed value and whether it matched.
@@ -24,8 +43,8 @@ func waitForInt(fn func() int, want int, timeout time.Duration) (int, bool) {
 	return fn(), false
 }
 
-// TestBulkhead_WaitingReflectsBlockedCallers verifies Waiting()/QueueDepth()
-// track the number of callers blocked in the maxWait wait and return to 0 once
+// TestBulkhead_WaitingReflectsBlockedCallers verifies QueueDepth()
+// tracks the number of callers blocked in the maxWait wait and returns to 0 once
 // they acquire a slot.
 func TestBulkhead_WaitingReflectsBlockedCallers(t *testing.T) {
 	const blockers = 4
@@ -62,10 +81,7 @@ func TestBulkhead_WaitingReflectsBlockedCallers(t *testing.T) {
 	}
 
 	// All blockers should be counted as waiting.
-	if got, ok := waitForInt(b.Waiting, blockers, 2*time.Second); !ok {
-		t.Fatalf("Waiting() = %d, want %d", got, blockers)
-	}
-	if got := b.QueueDepth(); got != blockers {
+	if got, ok := waitForInt(b.QueueDepth, blockers, 2*time.Second); !ok {
 		t.Fatalf("QueueDepth() = %d, want %d", got, blockers)
 	}
 
@@ -74,10 +90,7 @@ func TestBulkhead_WaitingReflectsBlockedCallers(t *testing.T) {
 	close(release)
 	wg.Wait()
 
-	if got, ok := waitForInt(b.Waiting, 0, 2*time.Second); !ok {
-		t.Fatalf("Waiting() = %d after drain, want 0", got)
-	}
-	if got := b.QueueDepth(); got != 0 {
+	if got, ok := waitForInt(b.QueueDepth, 0, 2*time.Second); !ok {
 		t.Fatalf("QueueDepth() = %d after drain, want 0", got)
 	}
 	if got := int(acquired.Load()); got != blockers {
@@ -108,9 +121,6 @@ func TestBulkhead_QueueDepthZeroWhenNonBlocking(t *testing.T) {
 		if got := b.QueueDepth(); got != 0 {
 			t.Fatalf("QueueDepth() = %d with maxWait=0, want 0", got)
 		}
-		if got := b.Waiting(); got != 0 {
-			t.Fatalf("Waiting() = %d with maxWait=0, want 0", got)
-		}
 	}
 	close(hold)
 }
@@ -120,12 +130,10 @@ func TestBulkhead_QueueDepthZeroWhenNonBlocking(t *testing.T) {
 func TestBulkhead_WaitTimeTrackedOnAcquire(t *testing.T) {
 	// Injected clock: advances by a fixed step on each read after the wait
 	// starts, giving a deterministic measured wait without real sleeps.
-	var clock atomic.Int64 // nanoseconds
-	clock.Store(int64(time.Unix(0, 0).UnixNano()))
-	now := func() time.Time { return time.Unix(0, clock.Load()) }
+	clk := newAtomicClock(time.Unix(0, 0))
 
 	const waitDur = 250 * time.Millisecond
-	b := New(1, 5*time.Second, WithClock(now))
+	b := New(1, 5*time.Second, WithClock(clk))
 
 	hold := make(chan struct{})
 	var firstIn sync.WaitGroup
@@ -147,10 +155,10 @@ func TestBulkhead_WaitTimeTrackedOnAcquire(t *testing.T) {
 	}()
 
 	// Ensure the second caller is actually waiting before advancing the clock.
-	if got, ok := waitForInt(b.Waiting, 1, 2*time.Second); !ok {
-		t.Fatalf("Waiting() = %d, want 1 before advancing clock", got)
+	if got, ok := waitForInt(b.QueueDepth, 1, 2*time.Second); !ok {
+		t.Fatalf("QueueDepth() = %d, want 1 before advancing clock", got)
 	}
-	clock.Add(int64(waitDur))
+	clk.Add(waitDur)
 	close(hold)
 
 	if err := <-done; err != nil {
@@ -225,8 +233,8 @@ func TestBulkhead_WaitTimeTrackedOnTimeout(t *testing.T) {
 	if stats.Last < maxWait/2 || stats.Last > maxWait*5 {
 		t.Fatalf("WaitStats.Last = %v, want ~%v", stats.Last, maxWait)
 	}
-	if b.Waiting() != 0 {
-		t.Fatalf("Waiting() = %d after timeout, want 0", b.Waiting())
+	if b.QueueDepth() != 0 {
+		t.Fatalf("QueueDepth() = %d after timeout, want 0", b.QueueDepth())
 	}
 }
 
@@ -244,14 +252,14 @@ func TestBulkhead_SaturationConcurrencyRace(t *testing.T) {
 	var minWaiting atomic.Int64 // track lowest observed to catch negatives
 	stop := make(chan struct{})
 
-	// Sampler: continuously read Waiting() and flag negatives.
+	// Sampler: continuously read QueueDepth() and flag negatives.
 	go func() {
 		for {
 			select {
 			case <-stop:
 				return
 			default:
-				if w := int64(b.Waiting()); w < minWaiting.Load() {
+				if w := int64(b.QueueDepth()); w < minWaiting.Load() {
 					minWaiting.Store(w)
 				}
 			}
@@ -282,10 +290,10 @@ func TestBulkhead_SaturationConcurrencyRace(t *testing.T) {
 	close(stop)
 
 	if minWaiting.Load() < 0 {
-		t.Fatalf("observed negative Waiting() count: %d", minWaiting.Load())
+		t.Fatalf("observed negative QueueDepth() count: %d", minWaiting.Load())
 	}
-	if got := b.Waiting(); got != 0 {
-		t.Fatalf("Waiting() = %d after drain, want 0", got)
+	if got := b.QueueDepth(); got != 0 {
+		t.Fatalf("QueueDepth() = %d after drain, want 0", got)
 	}
 	if got := b.Inflight(); got != 0 {
 		t.Fatalf("Inflight() = %d after drain, want 0", got)
@@ -301,8 +309,8 @@ func TestBulkhead_SaturationConcurrencyRace(t *testing.T) {
 // ThreadPool saturation tests
 // ---------------------------------------------------------------------------
 
-// TestThreadPool_PendingReflectsQueuedTasks verifies QueueDepth()/Pending()
-// reflect queued-but-not-started tasks, and Busy() reflects running workers.
+// TestThreadPool_PendingReflectsQueuedTasks verifies QueueDepth()
+// reflects queued-but-not-started tasks, and Busy() reflects running workers.
 func TestThreadPool_PendingReflectsQueuedTasks(t *testing.T) {
 	// One worker, queue depth 5. Block the worker so submitted tasks pile up.
 	tp := NewThreadPool(1, 5)
@@ -335,10 +343,7 @@ func TestThreadPool_PendingReflectsQueuedTasks(t *testing.T) {
 		}
 	}
 
-	if got, ok := waitForInt(tp.Pending, queued, 2*time.Second); !ok {
-		t.Fatalf("Pending() = %d, want %d", got, queued)
-	}
-	if got := tp.QueueDepth(); got != queued {
+	if got, ok := waitForInt(tp.QueueDepth, queued, 2*time.Second); !ok {
 		t.Fatalf("QueueDepth() = %d, want %d", got, queued)
 	}
 	if got := tp.Capacity(); got != 5 {
@@ -350,8 +355,8 @@ func TestThreadPool_PendingReflectsQueuedTasks(t *testing.T) {
 
 	// Release; the queue must drain to empty and workers go idle.
 	close(hold)
-	if got, ok := waitForInt(tp.Pending, 0, 2*time.Second); !ok {
-		t.Fatalf("Pending() = %d after drain, want 0", got)
+	if got, ok := waitForInt(tp.QueueDepth, 0, 2*time.Second); !ok {
+		t.Fatalf("QueueDepth() = %d after drain, want 0", got)
 	}
 	if got, ok := waitForInt(tp.Busy, 0, 2*time.Second); !ok {
 		t.Fatalf("Busy() = %d after drain, want 0", got)

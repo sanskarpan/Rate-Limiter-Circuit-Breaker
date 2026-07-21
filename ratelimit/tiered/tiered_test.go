@@ -121,9 +121,11 @@ func TestAllow_AllTiersAllow(t *testing.T) {
 	tenant := newFakeBucket(10, true)
 	global := newFakeBucket(100, true)
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "tenant", KeyFunc: Prefix(":"), Limiter: tenant},
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "tenant", KeyFunc: Prefix(":"), Limiter: tenant},
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	res := lim.Allow(ctxT(), "acme:alice")
 	if !res.Allowed {
@@ -164,9 +166,11 @@ func TestPerTierDenyAndMetadata(t *testing.T) {
 			tenant := newFakeBucket(tc.tenantCap, true)
 			global := newFakeBucket(tc.globalCap, true)
 			lim := New(
-				Tier{Name: "user", KeyFunc: identity, Limiter: user},
-				Tier{Name: "tenant", KeyFunc: Prefix(":"), Limiter: tenant},
-				Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+				[]Tier{
+					{Name: "user", KeyFunc: identity, Limiter: user},
+					{Name: "tenant", KeyFunc: Prefix(":"), Limiter: tenant},
+					{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+				},
 			)
 			res := lim.Allow(ctxT(), "acme:alice")
 			if res.Allowed == tc.wantDenied {
@@ -192,8 +196,10 @@ func TestRollback_LowerTierDeny(t *testing.T) {
 	user := newFakeBucket(5, true)
 	global := newFakeBucket(0, true) // no capacity => tier denies
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	before := user.remaining("alice")
 	res := lim.Allow(ctxT(), "alice")
@@ -218,8 +224,10 @@ func TestRollback_Phase2Anomaly(t *testing.T) {
 	user := newFakeBucket(5, true) // supports Credit => rollback restores it
 	trap := &peekLiesLimiter{}     // Peek says OK, AllowN denies
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "trap", KeyFunc: Constant("g"), Limiter: trap},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "trap", KeyFunc: Constant("g"), Limiter: trap},
+		},
 	)
 	before := user.remaining("bob")
 	res := lim.AllowN(ctxT(), "bob", 2)
@@ -258,8 +266,10 @@ func TestOrdering(t *testing.T) {
 	user := newFakeBucket(0, true)   // denies
 	tenant := newFakeBucket(0, true) // also denies
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "tenant", KeyFunc: Constant("t"), Limiter: tenant},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "tenant", KeyFunc: Constant("t"), Limiter: tenant},
+		},
 	)
 	res := lim.Allow(ctxT(), "x")
 	if res.Allowed {
@@ -274,8 +284,10 @@ func TestPeek(t *testing.T) {
 	user := newFakeBucket(3, true)
 	global := newFakeBucket(1, true) // most restrictive
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	st := lim.Peek(ctxT(), "alice")
 	if st.Remaining != 1 {
@@ -294,8 +306,10 @@ func TestReset(t *testing.T) {
 	user := newFakeBucket(2, true)
 	global := newFakeBucket(2, true)
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	lim.Allow(ctxT(), "alice")
 	lim.Allow(ctxT(), "alice")
@@ -321,8 +335,10 @@ func TestClose(t *testing.T) {
 	user := newFakeBucket(2, true)
 	global := newFakeBucket(2, true)
 	lim := New(
-		Tier{KeyFunc: identity, Limiter: user},
-		Tier{KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{KeyFunc: identity, Limiter: user},
+			{KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	if err := lim.Close(); err != nil {
 		t.Fatalf("close error: %v", err)
@@ -340,7 +356,9 @@ func TestWaitN_DeterministicClock(t *testing.T) {
 	global := tokenbucket.New(1, 1, tokenbucket.WithClock(mc))
 	defer global.Close()
 	lim := New(
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 		WithClock(mc),
 	)
 	// First allow consumes the only token.
@@ -373,7 +391,9 @@ func waitUntilBlocked() { time.Sleep(20 * time.Millisecond) }
 func TestWaitN_ContextCancel(t *testing.T) {
 	global := newFakeBucket(0, true) // always denies
 	lim := New(
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 	ctx, cancel := context.WithCancel(ctxT())
 	cancel()
@@ -388,7 +408,7 @@ func TestWaitN_ContextCancel(t *testing.T) {
 }
 
 func TestEmptyTiers(t *testing.T) {
-	lim := New()
+	lim := New(nil)
 	if lim.Allow(ctxT(), "x").Allowed {
 		t.Error("empty tiered limiter should deny")
 	}
@@ -399,7 +419,7 @@ func TestEmptyTiers(t *testing.T) {
 }
 
 func TestInvalidInput(t *testing.T) {
-	lim := New(Tier{KeyFunc: identity, Limiter: newFakeBucket(5, true)})
+	lim := New([]Tier{{KeyFunc: identity, Limiter: newFakeBucket(5, true)}})
 	if lim.Allow(ctxT(), "").Allowed {
 		t.Error("empty key should deny")
 	}
@@ -410,7 +430,7 @@ func TestInvalidInput(t *testing.T) {
 
 func TestNilKeyFuncIsIdentity(t *testing.T) {
 	user := newFakeBucket(1, true)
-	lim := New(Tier{Name: "user", Limiter: user}) // nil KeyFunc
+	lim := New([]Tier{{Name: "user", Limiter: user}}) // nil KeyFunc
 	res := lim.Allow(ctxT(), "raw-key")
 	if !res.Allowed {
 		t.Fatal("expected allow")
@@ -426,12 +446,12 @@ func TestNilLimiterPanics(t *testing.T) {
 			t.Error("expected panic on nil Limiter")
 		}
 	}()
-	New(Tier{Name: "bad", KeyFunc: identity, Limiter: nil})
+	New([]Tier{{Name: "bad", KeyFunc: identity, Limiter: nil}})
 }
 
 func TestCostMetadata(t *testing.T) {
 	user := newFakeBucket(5, true)
-	lim := New(Tier{Name: "user", KeyFunc: identity, Limiter: user})
+	lim := New([]Tier{{Name: "user", KeyFunc: identity, Limiter: user}})
 	res := lim.AllowN(ctxT(), "k", 3)
 	if !res.Allowed {
 		t.Fatal("expected allow")
@@ -453,8 +473,10 @@ func TestConcurrency_NoLeak(t *testing.T) {
 	user := newFakeBucket(1000, true) // effectively unlimited per user here
 	global := newFakeBucket(globalCap, true)
 	lim := New(
-		Tier{Name: "user", KeyFunc: identity, Limiter: user},
-		Tier{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		[]Tier{
+			{Name: "user", KeyFunc: identity, Limiter: user},
+			{Name: "global", KeyFunc: Constant("all"), Limiter: global},
+		},
 	)
 
 	var wg sync.WaitGroup

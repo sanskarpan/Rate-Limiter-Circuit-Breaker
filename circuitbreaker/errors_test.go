@@ -24,21 +24,21 @@ func TestCircuitError_IsSentinels(t *testing.T) {
 	}{
 		{
 			name:           "open error matches ErrCircuitOpen only",
-			err:            &cb.CircuitError{Name: "svc", State: cb.StateOpen, Err: cb.ErrCircuitOpen},
+			err:            cb.NewCircuitError("svc", cb.StateOpen, 0, cb.ErrCircuitOpen),
 			wantOpen:       true,
 			wantTooMany:    false,
 			wantNotSentinl: cb.ErrTooManyRequests,
 		},
 		{
 			name:           "too-many error matches ErrTooManyRequests only",
-			err:            &cb.CircuitError{Name: "svc", State: cb.StateHalfOpen, Err: cb.ErrTooManyRequests},
+			err:            cb.NewCircuitError("svc", cb.StateHalfOpen, 0, cb.ErrTooManyRequests),
 			wantOpen:       false,
 			wantTooMany:    true,
 			wantNotSentinl: cb.ErrCircuitOpen,
 		},
 		{
 			name:        "wrapped open error still matches",
-			err:         fmt.Errorf("boom: %w", &cb.CircuitError{Name: "svc", State: cb.StateOpen, Err: cb.ErrCircuitOpen}),
+			err:         fmt.Errorf("boom: %w", cb.NewCircuitError("svc", cb.StateOpen, 0, cb.ErrCircuitOpen)),
 			wantOpen:    true,
 			wantTooMany: false,
 		},
@@ -65,14 +65,9 @@ func TestCircuitError_IsSentinels(t *testing.T) {
 // TestCircuitError_Accessors verifies the accessor methods return the stored
 // fields.
 func TestCircuitError_Accessors(t *testing.T) {
-	e := &cb.CircuitError{
-		Name:              "payments",
-		State:             cb.StateOpen,
-		TimeUntilHalfOpen: 250 * time.Millisecond,
-		Err:               cb.ErrCircuitOpen,
-	}
-	if e.GetName() != "payments" {
-		t.Errorf("GetName = %q, want payments", e.GetName())
+	e := cb.NewCircuitError("payments", cb.StateOpen, 250*time.Millisecond, cb.ErrCircuitOpen)
+	if e.Name != "payments" {
+		t.Errorf("Name = %q, want payments", e.Name)
 	}
 	if e.CircuitState() != cb.StateOpen {
 		t.Errorf("CircuitState = %v, want StateOpen", e.CircuitState())
@@ -90,7 +85,7 @@ func TestCircuitError_Accessors(t *testing.T) {
 // TestAsCircuitError verifies extraction via errors.As, including through a
 // wrapping layer, and the no-match case.
 func TestAsCircuitError(t *testing.T) {
-	orig := &cb.CircuitError{Name: "svc", State: cb.StateOpen, Err: cb.ErrCircuitOpen}
+	orig := cb.NewCircuitError("svc", cb.StateOpen, 0, cb.ErrCircuitOpen)
 
 	if got, ok := cb.AsCircuitError(orig); !ok || got != orig {
 		t.Fatalf("AsCircuitError(direct) = %v, %v; want %v, true", got, ok, orig)
@@ -138,8 +133,8 @@ func TestCircuitError_EndToEnd_OpenCarriesContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected CircuitError, got %v", err)
 	}
-	if ce.GetName() != "svc-e2e" {
-		t.Errorf("Name = %q, want svc-e2e", ce.GetName())
+	if ce.Name != "svc-e2e" {
+		t.Errorf("Name = %q, want svc-e2e", ce.Name)
 	}
 	if ce.CircuitState() != cb.StateOpen {
 		t.Errorf("State = %v, want StateOpen", ce.CircuitState())

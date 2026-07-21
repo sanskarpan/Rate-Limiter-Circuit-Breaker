@@ -42,7 +42,8 @@ func (rr *responseRecorder) Write(b []byte) (int, error) {
 }
 
 // CircuitBreaker returns an HTTP middleware that wraps each request with the
-// given circuit breaker.
+// given circuit breaker. cb may be a *circuitbreaker.CircuitBreaker or a
+// *circuitbreaker.DistributedCircuitBreaker (both satisfy circuitbreaker.Executor).
 //
 // Behaviour:
 //   - If the circuit is open, the middleware responds with 503 Service Unavailable
@@ -52,7 +53,7 @@ func (rr *responseRecorder) Write(b []byte) (int, error) {
 //   - Response bytes are always written through to the client in real time; there is
 //     no buffering. When a 5xx is detected, the response has already been sent, so the
 //     circuit records the failure but does NOT send an additional error body.
-func CircuitBreaker(cb *circuitbreaker.CircuitBreaker) func(http.Handler) http.Handler {
+func CircuitBreaker(cb circuitbreaker.Executor) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			err := cb.Execute(r.Context(), func(ctx context.Context) error {

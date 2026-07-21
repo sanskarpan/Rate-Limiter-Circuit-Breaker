@@ -13,16 +13,16 @@ import (
 // sliding-window-log scores snap to the nearest multiple of 256ns.
 func TestPrecisionBound_CurrentEpochIs256(t *testing.T) {
 	now := time.Now().UnixNano()
-	if got := PrecisionBoundNs(now); got != 256 {
-		t.Fatalf("PrecisionBoundNs(now=%d) = %d, want 256 (the documented ≤256ns bound for the current epoch)", now, got)
+	if got := precisionBoundNs(now); got != 256 {
+		t.Fatalf("precisionBoundNs(now=%d) = %d, want 256 (the documented ≤256ns bound for the current epoch)", now, got)
 	}
 	// The bound holds for the whole plausible operating range: from 2020 to well
 	// past 2040 the ULP stays 256 (it becomes 512 only past 2^61 ≈ year 2043).
 	y2020 := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 	y2042 := time.Date(2042, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 	for _, ts := range []int64{y2020, now, y2042} {
-		if got := PrecisionBoundNs(ts); got != 256 {
-			t.Fatalf("PrecisionBoundNs(%d) = %d, want 256", ts, got)
+		if got := precisionBoundNs(ts); got != 256 {
+			t.Fatalf("precisionBoundNs(%d) = %d, want 256", ts, got)
 		}
 	}
 }
@@ -34,7 +34,7 @@ func TestPrecisionBound_MatchesFloat64ULP(t *testing.T) {
 	base := time.Now().UnixNano()
 	for i := int64(0); i < 100000; i++ {
 		ns := base + i
-		bound := PrecisionBoundNs(ns)
+		bound := precisionBoundNs(ns)
 		// Actual error when Redis Lua stores ns as a double then reads it back.
 		roundTripped := int64(float64(ns))
 		err := ns - roundTripped
@@ -53,8 +53,8 @@ func TestPrecisionBound_MatchesFloat64ULP(t *testing.T) {
 		}
 	}
 	// Below 2^53 the representation is exact.
-	if b := PrecisionBoundNs(1 << 52); b != 0 {
-		t.Fatalf("PrecisionBoundNs(2^52) = %d, want 0 (exactly representable)", b)
+	if b := precisionBoundNs(1 << 52); b != 0 {
+		t.Fatalf("precisionBoundNs(2^52) = %d, want 0 (exactly representable)", b)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestPrecisionSnapping_NeverOverAdmits_GCRA(t *testing.T) {
 	for i := 0; i < steps; i++ {
 		now := base + int64(i)*stepNs
 		args := []any{emission, burst, int64(1), now, int64(60000)}
-		res, err := m.Eval(ctx, GCRAScript, []string{"k"}, args...)
+		res, err := m.Eval(ctx, GCRAScriptID, []string{"k"}, args...)
 		if err != nil {
 			t.Fatalf("eval: %v", err)
 		}

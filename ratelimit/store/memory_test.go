@@ -177,11 +177,12 @@ func TestMemory_Eval_RegisteredScript(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	s.RegisterScript("sum", func(keys []string, args []any) (any, error) {
+	sumID := store.NewScriptID("sum")
+	s.RegisterScript(sumID, func(keys []string, args []any) (any, error) {
 		return int64(42), nil
 	})
 
-	result, err := s.Eval(ctx, "sum", []string{"k"})
+	result, err := s.Eval(ctx, sumID, []string{"k"})
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestMemory_Eval_RegisteredScript(t *testing.T) {
 func TestMemory_Eval_UnregisteredScript(t *testing.T) {
 	s := store.NewMemory()
 	defer s.Close()
-	_, err := s.Eval(context.Background(), "unknown-script", nil)
+	_, err := s.Eval(context.Background(), store.NewScriptID("unknown-script"), nil)
 	if err == nil {
 		t.Fatal("eval of unknown script should return error")
 	}

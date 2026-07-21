@@ -6,20 +6,48 @@ import (
 	"time"
 )
 
+// rngSource wraps an optional *rand.Rand behind a mutex so that concurrent
+// calls to Next are safe even when the caller supplies their own source.
+// When rng is nil, the package-level rand functions are used instead (those
+// are goroutine-safe since Go 1.20).
+type rngSource struct {
+	mu  sync.Mutex
+	rng *rand.Rand // nil means: use package-level rand
+}
+
+// int63n returns a non-negative pseudo-random int64 in [0, n).
+func (r *rngSource) int63n(n int64) int64 {
+	if r.rng == nil {
+		return rand.Int63n(n)
+	}
+	r.mu.Lock()
+	v := r.rng.Int63n(n)
+	r.mu.Unlock()
+	return v
+}
+
 // fullJitterBackoff implements the "Full Jitter" AWS backoff strategy.
 // sleep = random(0, min(cap, base * 2^attempt))
 type fullJitterBackoff struct {
 	base time.Duration
 	cap  time.Duration
-	mu   sync.Mutex // guards concurrent use of rng
-	rng  *rand.Rand
+	src  rngSource
 }
 
 // FullJitter returns a BackoffStrategy that applies full random jitter.
 // The delay is uniformly distributed in [0, min(cap, base * 2^attempt)).
-// rng must not be nil; it is the caller's responsibility to seed it.
-func FullJitter(base, cap time.Duration, rng *rand.Rand) BackoffStrategy {
-	return &fullJitterBackoff{base: base, cap: cap, rng: rng}
+//
+// rng is optional: pass a *rand.Rand to use a deterministic or isolated source
+// (useful in tests and for reproducible behaviour). Omit it (or pass nil) to
+// use the auto-seeded package-level source, which is goroutine-safe since
+// Go 1.20. When a non-nil rng is supplied it is protected by an internal mutex
+// so the returned strategy is safe for concurrent use.
+func FullJitter(base, cap time.Duration, rng ...*rand.Rand) BackoffStrategy {
+	b := &fullJitterBackoff{base: base, cap: cap}
+	if len(rng) > 0 {
+		b.src.rng = rng[0]
+	}
+	return b
 }
 
 // Next returns a random duration in [0, exponentialCap).
@@ -28,9 +56,7 @@ func (f *fullJitterBackoff) Next(attempt int) time.Duration {
 	if exp <= 0 {
 		return 0
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return time.Duration(f.rng.Int63n(int64(exp)))
+	return time.Duration(f.src.int63n(int64(exp)))
 }
 
 // equalJitterBackoff implements the "Equal Jitter" AWS backoff strategy.
@@ -38,15 +64,23 @@ func (f *fullJitterBackoff) Next(attempt int) time.Duration {
 type equalJitterBackoff struct {
 	base   time.Duration
 	maxCap time.Duration
-	mu     sync.Mutex // guards concurrent use of rng
-	rng    *rand.Rand
+	src    rngSource
 }
 
 // EqualJitter returns a BackoffStrategy that applies equal jitter.
 // Half of the delay is constant (cap/2) and half is random [0, cap/2).
-// rng must not be nil.
-func EqualJitter(base, cap time.Duration, rng *rand.Rand) BackoffStrategy {
-	return &equalJitterBackoff{base: base, maxCap: cap, rng: rng}
+//
+// rng is optional: pass a *rand.Rand to use a deterministic or isolated source
+// (useful in tests and for reproducible behaviour). Omit it (or pass nil) to
+// use the auto-seeded package-level source, which is goroutine-safe since
+// Go 1.20. When a non-nil rng is supplied it is protected by an internal mutex
+// so the returned strategy is safe for concurrent use.
+func EqualJitter(base, cap time.Duration, rng ...*rand.Rand) BackoffStrategy {
+	b := &equalJitterBackoff{base: base, maxCap: cap}
+	if len(rng) > 0 {
+		b.src.rng = rng[0]
+	}
+	return b
 }
 
 // Next returns cap/2 + random(0, cap/2) where cap = min(maxCap, base * 2^attempt).
@@ -59,9 +93,7 @@ func (e *equalJitterBackoff) Next(attempt int) time.Duration {
 	if half <= 0 {
 		return cap
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return half + time.Duration(e.rng.Int63n(int64(half)))
+	return half + time.Duration(e.src.int63n(int64(half)))
 }
 
 // exponentialCap computes min(maxCap, base * 2^attempt) without overflowing.

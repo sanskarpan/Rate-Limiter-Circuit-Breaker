@@ -91,9 +91,10 @@ func NewMemory(opts ...MemoryOption) *Memory {
 	return m
 }
 
-// RegisterScript registers a named script handler for use with Eval.
-func (m *Memory) RegisterScript(name string, h ScriptHandler) {
-	m.scripts.Store(name, h)
+// RegisterScript registers a handler for a ScriptID for use with Eval.
+// Use the package-level ScriptID constants (TokenBucketScriptID etc.) as the id.
+func (m *Memory) RegisterScript(id ScriptID, h ScriptHandler) {
+	m.scripts.Store(id.name, h)
 }
 
 // removeEntry deletes key from the map and decrements the tracked key count if
@@ -334,11 +335,12 @@ func (m *Memory) IncrBy(_ context.Context, key string, delta int64, ttl time.Dur
 	return newVal, nil
 }
 
-// Eval dispatches to a registered script handler by name.
-func (m *Memory) Eval(_ context.Context, script string, keys []string, args ...any) (any, error) {
-	h, ok := m.scripts.Load(script)
+// Eval dispatches to the handler registered for scriptID.
+// scriptID must be one of the package-level ScriptID constants.
+func (m *Memory) Eval(_ context.Context, scriptID ScriptID, keys []string, args ...any) (any, error) {
+	h, ok := m.scripts.Load(scriptID.name)
 	if !ok {
-		return nil, fmt.Errorf("store: no script handler registered for %q", script)
+		return nil, fmt.Errorf("store: no script handler registered for %q", scriptID)
 	}
 	return h.(ScriptHandler)(keys, args)
 }

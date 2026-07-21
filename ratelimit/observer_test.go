@@ -14,8 +14,8 @@ import (
 )
 
 // Compile-time assertions that representative concrete limiters satisfy the
-// read-only Peeker and Observer views. These fail to compile — not at runtime —
-// if a limiter stops implementing Peek or the interfaces drift apart.
+// read-only Peeker view. These fail to compile — not at runtime —
+// if a limiter stops implementing Peek or the interface drifts.
 var (
 	_ ratelimit.Peeker = (*tokenbucket.TokenBucket)(nil)
 	_ ratelimit.Peeker = (*gcra.GCRA)(nil)
@@ -23,15 +23,8 @@ var (
 	_ ratelimit.Peeker = (*slidingwindow.SlidingWindowLog)(nil)
 	_ ratelimit.Peeker = (*leakybucket.LeakyBucket)(nil)
 
-	_ ratelimit.Observer = (*tokenbucket.TokenBucket)(nil)
-	_ ratelimit.Observer = (*gcra.GCRA)(nil)
-	_ ratelimit.Observer = (*fixedwindow.FixedWindowCounter)(nil)
-	_ ratelimit.Observer = (*slidingwindow.SlidingWindowLog)(nil)
-	_ ratelimit.Observer = (*leakybucket.LeakyBucket)(nil)
-
-	// The full Limiter interface must remain assignable to both read-only views.
-	_ ratelimit.Peeker   = ratelimit.Limiter(nil)
-	_ ratelimit.Observer = ratelimit.Limiter(nil)
+	// The full Limiter interface must remain assignable to the read-only Peeker view.
+	_ ratelimit.Peeker = ratelimit.Limiter(nil)
 )
 
 // TestPeekerObserveWithoutMutation verifies that using a limiter purely through
@@ -84,17 +77,17 @@ func TestPeekerObserveWithoutMutation(t *testing.T) {
 	}
 }
 
-// TestObserverAcceptsLimiter documents the intended usage: a consumer function
-// that only observes accepts an Observer, and any Limiter can be passed to it.
-func TestObserverAcceptsLimiter(t *testing.T) {
+// TestPeekerAcceptsLimiter documents the intended usage: a consumer function
+// that only observes accepts a Peeker, and any Limiter can be passed to it.
+func TestPeekerAcceptsLimiter(t *testing.T) {
 	t.Parallel()
 
-	observe := func(o ratelimit.Observer) ratelimit.State {
+	observe := func(o ratelimit.Peeker) ratelimit.State {
 		return o.Peek(context.Background(), "k")
 	}
 
 	var lim ratelimit.Limiter = tokenbucket.New(10, 1)
 	if st := observe(lim); st.Algorithm == "" {
-		t.Fatal("expected a non-empty Algorithm from Peek via Observer")
+		t.Fatal("expected a non-empty Algorithm from Peek via Peeker")
 	}
 }

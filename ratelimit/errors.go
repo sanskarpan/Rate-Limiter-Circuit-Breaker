@@ -17,7 +17,11 @@ var (
 	// ErrInvalidN is returned when n < 1 is passed to AllowN or WaitN.
 	ErrInvalidN = errors.New("n must be >= 1")
 
-	// ErrClosed is returned when a method is called on a closed limiter.
+	// ErrClosed is returned by WaitN, Wait, and Reset when those methods are
+	// called on a limiter that has already been closed. Allow and AllowN return
+	// a denied Result (not an error) so they cannot carry ErrClosed without an
+	// API change; Peek similarly returns State. Only the blocking/mutating paths
+	// (Wait, WaitN, Reset) return ErrClosed.
 	ErrClosed = errors.New("limiter is closed")
 
 	// ErrContextDone is returned when the context is cancelled while waiting for a token.
@@ -37,6 +41,11 @@ type RateLimitError struct {
 	Limit int
 
 	// RetryAfter is how long the caller should wait before retrying.
+	// The unit is time.Duration (nanoseconds). A zero value means the
+	// limiter did not provide a hint — callers should treat zero as
+	// "unknown" and apply their own back-off rather than retrying
+	// immediately. A positive value is a concrete minimum wait derived
+	// from the algorithm (e.g. token refill time, window reset).
 	RetryAfter time.Duration
 
 	// Err is the underlying error (wraps ErrLimitExceeded).

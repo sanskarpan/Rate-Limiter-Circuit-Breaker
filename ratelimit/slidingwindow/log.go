@@ -271,10 +271,14 @@ func (l *SlidingWindowLog) consume(kl *keyLog, n int) ratelimit.Result {
 		if count > 0 {
 			retryAfter = kl.timestamps[0].Add(l.window).Sub(now)
 		}
+		remaining := l.limit - count
+		if remaining < 0 {
+			remaining = 0
+		}
 		return ratelimit.Result{
 			Allowed:    false,
 			Limit:      l.limit,
-			Remaining:  l.limit - count,
+			Remaining:  remaining,
 			RetryAfter: retryAfter,
 			ResetAfter: retryAfter,
 			Algorithm:  logAlgorithmName,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
@@ -24,7 +25,7 @@ func TestComposite_AND_BothAllow(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -45,7 +46,7 @@ func TestComposite_AND_AAllowsBDenies(t *testing.T) {
 	// Exhaust limB
 	limB.Allow(ctx, "key") //nolint:errcheck
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	// AND mode: A would allow, B denies → overall denied, A's token NOT consumed
@@ -67,7 +68,7 @@ func TestComposite_AND_BothConsume(t *testing.T) {
 	limA := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	limB := tokenbucket.New(5, 5, tokenbucket.WithClock(clk))
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -93,7 +94,7 @@ func TestComposite_OR_AAllows(t *testing.T) {
 	limA := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	limB := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // empty, will deny
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -109,7 +110,7 @@ func TestComposite_OR_ADenies_BAllows(t *testing.T) {
 	limA := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // empty, will deny
 	limB := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -125,7 +126,7 @@ func TestComposite_OR_BothDeny(t *testing.T) {
 	limA := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // empty
 	limB := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // empty
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -141,7 +142,7 @@ func TestComposite_AND_ReturnsMostRestrictiveResult(t *testing.T) {
 	limA := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	limB := tokenbucket.New(3, 3, tokenbucket.WithClock(clk))
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -162,7 +163,7 @@ func TestComposite_Concurrent_NoRace(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -183,7 +184,7 @@ func TestComposite_Reset_AllLimiters(t *testing.T) {
 	limA := tokenbucket.New(2, 1, tokenbucket.WithClock(clk))
 	limB := tokenbucket.New(2, 1, tokenbucket.WithClock(clk))
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -207,7 +208,7 @@ func TestComposite_AlgorithmField(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clock.RealClock{}))
 	defer lim.Close()
 
-	and := composite.New(composite.AND, lim)
+	and := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer and.Close()
 
 	ctx := context.Background()
@@ -222,7 +223,7 @@ func TestComposite_Wait_BlocksUntilAllowed(t *testing.T) {
 	lim := tokenbucket.New(1, 1, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim).WithClock(clk)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim}, composite.WithClock(clk))
 	defer comp.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -266,7 +267,7 @@ func TestComposite_WaitN(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -282,7 +283,7 @@ func TestComposite_Peek(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -308,7 +309,7 @@ func TestComposite_Peek_DoesNotConsume(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -329,7 +330,7 @@ func TestComposite_OR_ShortestRetry(t *testing.T) {
 	limA := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // Denies immediately
 	limB := tokenbucket.New(0, 1, tokenbucket.WithClock(clk)) // Denies immediately
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -352,7 +353,7 @@ func TestComposite_MostRestrictive(t *testing.T) {
 	defer lim1.Close()
 	defer lim2.Close()
 
-	comp := composite.New(composite.AND, lim1, lim2)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim1, lim2})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -370,7 +371,7 @@ func TestComposite_SingleLimiter(t *testing.T) {
 	defer lim.Close()
 
 	// Single limiter in AND mode should work
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -381,7 +382,7 @@ func TestComposite_SingleLimiter(t *testing.T) {
 }
 
 func TestComposite_Empty_Denies(t *testing.T) {
-	comp := composite.New(composite.AND)
+	comp := composite.New(composite.AND, nil)
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -398,7 +399,7 @@ func TestComposite_OR_OneAllows(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -415,7 +416,7 @@ func TestComposite_OR_AllDeny(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.OR, limA, limB)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -430,7 +431,7 @@ func TestComposite_WaitN_ExceedsLimit(t *testing.T) {
 	lim := tokenbucket.New(2, 2, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -447,7 +448,7 @@ func TestComposite_Reset(t *testing.T) {
 	lim := tokenbucket.New(1, 1, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -462,7 +463,7 @@ func TestComposite_Reset(t *testing.T) {
 
 func TestComposite_Close_Idempotent(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clock.RealClock{}))
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 
 	comp.Close() //nolint:errcheck
 	comp.Close() //nolint:errcheck
@@ -474,7 +475,7 @@ func TestComposite_InvalidKey(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	result := comp.Allow(context.Background(), "")
@@ -488,7 +489,7 @@ func TestComposite_InvalidN(t *testing.T) {
 	lim := tokenbucket.New(10, 10, tokenbucket.WithClock(clk))
 	defer lim.Close()
 
-	comp := composite.New(composite.AND, lim)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{lim})
 	defer comp.Close()
 
 	result := comp.AllowN(context.Background(), "key", 0)

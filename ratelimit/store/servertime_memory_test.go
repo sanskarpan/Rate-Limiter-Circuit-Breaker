@@ -40,7 +40,7 @@ func TestMemory_ServerTime_TokenBucketParity(t *testing.T) {
 	run := func(m *store.Memory, useServerTime int) (allowed int) {
 		nowNs := int64(1_000_000_000_000_000) // fixed client clock
 		for i := 0; i < 5; i++ {
-			res, err := m.Eval(ctx, store.TokenBucketScript,
+			res, err := m.Eval(ctx, store.TokenBucketScriptID,
 				[]string{"tb:parity"},
 				capacity, refillRate, n, nowNs, ttlMs, useServerTime,
 			)
@@ -81,7 +81,7 @@ func TestMemory_ServerTime_GCRAParity(t *testing.T) {
 	run := func(m *store.Memory, useServerTime int) (allowed int) {
 		nowNs := int64(2_000_000_000_000_000)
 		for i := 0; i < 5; i++ {
-			res, err := m.Eval(ctx, store.GCRAScript,
+			res, err := m.Eval(ctx, store.GCRAScriptID,
 				[]string{"gcra:parity"},
 				emission, burst, n, nowNs, ttlMs, useServerTime,
 			)
@@ -117,7 +117,7 @@ func TestMemory_ServerTime_IgnoredWhenStoreDisabled(t *testing.T) {
 	// A deliberately-skewed far-future client now; if the store honored the flag
 	// it would use its own clock instead. With server-time OFF the client now is
 	// authoritative and the first request is admitted normally.
-	res, err := m.Eval(ctx, store.TokenBucketScript,
+	res, err := m.Eval(ctx, store.TokenBucketScriptID,
 		[]string{"tb:disabled"},
 		3.0, 1e-12, 1, int64(9_000_000_000_000_000), 60000, 1,
 	)

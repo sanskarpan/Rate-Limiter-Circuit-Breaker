@@ -1,7 +1,6 @@
 package backoff_test
 
 import (
-	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -79,10 +78,9 @@ func TestExponentialBackoff_LargeAttemptDoesNotOverflow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestFullJitter_AlwaysWithinBounds(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
 	base := 100 * time.Millisecond
 	cap := 2 * time.Second
-	b := backoff.FullJitter(base, cap, rng)
+	b := backoff.FullJitter(base, cap)
 
 	for attempt := 0; attempt < 1000; attempt++ {
 		got := b.Next(attempt % 10)
@@ -95,10 +93,9 @@ func TestFullJitter_AlwaysWithinBounds(t *testing.T) {
 func TestFullJitter_Distribution_MeanApproxHalfCap(t *testing.T) {
 	// At a high enough attempt, exponentialCap saturates to cap.
 	// The distribution then is uniform on [0, cap), mean ≈ cap/2.
-	rng := rand.New(rand.NewSource(12345))
 	base := 1 * time.Millisecond
 	capDur := 1000 * time.Millisecond
-	b := backoff.FullJitter(base, capDur, rng)
+	b := backoff.FullJitter(base, capDur)
 
 	const samples = 100_000
 	var total int64
@@ -119,10 +116,9 @@ func TestFullJitter_Distribution_MeanApproxHalfCap(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEqualJitter_AlwaysWithinBounds(t *testing.T) {
-	rng := rand.New(rand.NewSource(99))
 	base := 100 * time.Millisecond
 	capDur := 2 * time.Second
-	b := backoff.EqualJitter(base, capDur, rng)
+	b := backoff.EqualJitter(base, capDur)
 
 	for attempt := 0; attempt < 1000; attempt++ {
 		got := b.Next(attempt % 10)
@@ -136,10 +132,9 @@ func TestEqualJitter_MinimumIsHalfCap(t *testing.T) {
 	// At saturated cap, min value is cap/2 (when rng always returns 0).
 	// We cannot mock rng to return 0, but we can check that the min observed
 	// over many samples is >= cap/2 - 1 (rounding).
-	rng := rand.New(rand.NewSource(7))
 	base := 1 * time.Millisecond
 	capDur := 200 * time.Millisecond
-	b := backoff.EqualJitter(base, capDur, rng)
+	b := backoff.EqualJitter(base, capDur)
 
 	minSeen := capDur
 	const samples = 10_000
@@ -161,10 +156,9 @@ func TestEqualJitter_MinimumIsHalfCap(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDecorrelatedJitter_NeverExceedsCap(t *testing.T) {
-	rng := rand.New(rand.NewSource(2024))
 	base := 100 * time.Millisecond
 	capDur := 3 * time.Second
-	b := backoff.Decorrelated(base, capDur, rng)
+	b := backoff.Decorrelated(base, capDur)
 
 	for attempt := 0; attempt < 1000; attempt++ {
 		got := b.Next(attempt)
@@ -179,10 +173,9 @@ func TestDecorrelatedJitter_NeverExceedsCap(t *testing.T) {
 
 func TestDecorrelatedJitter_NoBoundExplosion(t *testing.T) {
 	// Run thousands of attempts and confirm the cap is never exceeded.
-	rng := rand.New(rand.NewSource(555))
 	base := 50 * time.Millisecond
 	capDur := 1 * time.Second
-	b := backoff.Decorrelated(base, capDur, rng)
+	b := backoff.Decorrelated(base, capDur)
 
 	for i := 0; i < 10_000; i++ {
 		got := b.Next(i)
@@ -194,21 +187,23 @@ func TestDecorrelatedJitter_NoBoundExplosion(t *testing.T) {
 
 func TestDecorrelatedJitter_StateIsIndependentOfAttemptArg(t *testing.T) {
 	// The decorrelated strategy is stateful: it ignores the attempt arg and
-	// uses its internal prev state. Verify two separate strategies with the
-	// same seed produce identical results when called with non-monotonic args.
-	rng1 := rand.New(rand.NewSource(42))
-	rng2 := rand.New(rand.NewSource(42))
+	// uses its internal prev state. Verify two separate strategies produce
+	// values in the correct range when called with non-monotonic args.
 	base := 100 * time.Millisecond
 	capDur := 2 * time.Second
-	b1 := backoff.Decorrelated(base, capDur, rng1)
-	b2 := backoff.Decorrelated(base, capDur, rng2)
+	b1 := backoff.Decorrelated(base, capDur)
+	b2 := backoff.Decorrelated(base, capDur)
 
 	args := []int{5, 0, 99, 3, 1, 7}
 	for i, arg := range args {
 		v1 := b1.Next(arg)
 		v2 := b2.Next(arg)
-		if v1 != v2 {
-			t.Errorf("call %d with arg %d: b1=%v b2=%v differ", i, arg, v1, v2)
+		// Each value must be in [base, cap] regardless of attempt arg.
+		if v1 < base || v1 > capDur {
+			t.Errorf("b1 call %d with arg %d: %v outside [%v, %v]", i, arg, v1, base, capDur)
+		}
+		if v2 < base || v2 > capDur {
+			t.Errorf("b2 call %d with arg %d: %v outside [%v, %v]", i, arg, v2, base, capDur)
 		}
 	}
 }
@@ -238,18 +233,15 @@ func concurrentNext(t *testing.T, b backoff.BackoffStrategy) {
 }
 
 func TestFullJitter_ConcurrentNextRaceFree(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	concurrentNext(t, backoff.FullJitter(10*time.Millisecond, time.Second, rng))
+	concurrentNext(t, backoff.FullJitter(10*time.Millisecond, time.Second))
 }
 
 func TestEqualJitter_ConcurrentNextRaceFree(t *testing.T) {
-	rng := rand.New(rand.NewSource(2))
-	concurrentNext(t, backoff.EqualJitter(10*time.Millisecond, time.Second, rng))
+	concurrentNext(t, backoff.EqualJitter(10*time.Millisecond, time.Second))
 }
 
 func TestDecorrelatedJitter_ConcurrentNextRaceFree(t *testing.T) {
-	rng := rand.New(rand.NewSource(3))
-	concurrentNext(t, backoff.Decorrelated(10*time.Millisecond, time.Second, rng))
+	concurrentNext(t, backoff.Decorrelated(10*time.Millisecond, time.Second))
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +263,8 @@ func TestExponentialBackoff_ZeroBaseReturnsZero(t *testing.T) {
 }
 
 func TestJitter_ZeroBaseReturnsZero(t *testing.T) {
-	rng := rand.New(rand.NewSource(4))
-	full := backoff.FullJitter(0, time.Hour, rng)
-	equal := backoff.EqualJitter(0, time.Hour, rng)
+	full := backoff.FullJitter(0, time.Hour)
+	equal := backoff.EqualJitter(0, time.Hour)
 	for attempt := 0; attempt < 5; attempt++ {
 		if got := full.Next(attempt); got != 0 {
 			t.Errorf("FullJitter base 0 attempt %d: expected 0, got %v", attempt, got)

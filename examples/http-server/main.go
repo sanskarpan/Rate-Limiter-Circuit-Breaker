@@ -12,14 +12,13 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 	cbmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
-	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
 
 func main() {
 	// 1. Create a token bucket rate limiter: 10 requests/second, burst of 20.
-	limiter := tokenbucket.New(10, 20, tokenbucket.WithClock(clock.RealClock{}))
+	limiter := tokenbucket.New(10, 20)
 	defer limiter.Close()
 
 	// 2. Create a circuit breaker with count-based window.
@@ -29,7 +28,6 @@ func main() {
 		WindowSize:       10,
 		FailureThreshold: 5,
 		OpenTimeout:      10 * time.Second,
-		Clock:            clock.RealClock{},
 	})
 
 	// 3. Build handler chain: rate limit → CB → actual handler

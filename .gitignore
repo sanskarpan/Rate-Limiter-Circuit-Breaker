@@ -15,3 +15,5 @@ frontend/.playwright/
 
 # goreleaser build output
 /dist/
+examples/pipeline/pipeline
+/tiered

@@ -40,12 +40,12 @@ func TestBulkhead_AllowUpToConcurrencyLimit(t *testing.T) {
 	// Wait until all limit slots are occupied.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if b.Inflight() == int64(limit) {
+		if b.Inflight() == limit {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := b.Inflight(); got != int64(limit) {
+	if got := b.Inflight(); got != limit {
 		t.Fatalf("expected %d inflight, got %d", limit, got)
 	}
 
@@ -234,7 +234,7 @@ func TestBulkhead_MetricsAccurate(t *testing.T) {
 	}
 	started.Wait()
 
-	if got := b.Inflight(); got != int64(limit) {
+	if got := b.Inflight(); got != limit {
 		t.Fatalf("expected %d inflight, got %d", limit, got)
 	}
 
@@ -253,11 +253,11 @@ func TestBulkhead_MetricsAccurate(t *testing.T) {
 	}
 	wg.Wait()
 
-	expectedRejected := int64(total - limit)
+	expectedRejected := total - limit
 	if got := b.Rejected(); got != expectedRejected {
 		t.Fatalf("expected %d rejected, got %d", expectedRejected, got)
 	}
-	if got := rejected.Load(); got != expectedRejected {
+	if got := int(rejected.Load()); got != expectedRejected {
 		t.Fatalf("locally counted %d rejections, expected %d", got, expectedRejected)
 	}
 

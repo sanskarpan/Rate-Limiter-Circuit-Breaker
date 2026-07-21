@@ -13,7 +13,6 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
 	cbmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker/middleware"
-	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	ratelimitmw "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/middleware"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
@@ -24,7 +23,7 @@ type echoServer struct{}
 
 func main() {
 	// 1. Create rate limiter: 100 req/s per key, burst 20.
-	limiter := tokenbucket.New(100, 20, tokenbucket.WithClock(clock.RealClock{}))
+	limiter := tokenbucket.New(100, 20)
 	defer limiter.Close()
 
 	// 2. Create circuit breaker.
@@ -34,7 +33,6 @@ func main() {
 		WindowSize:       20,
 		FailureThreshold: 5,
 		OpenTimeout:      30 * time.Second,
-		Clock:            clock.RealClock{},
 	})
 
 	// 3. Build gRPC server with chained interceptors.

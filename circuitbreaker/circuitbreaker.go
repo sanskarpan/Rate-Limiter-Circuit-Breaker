@@ -22,6 +22,14 @@ import (
 	"time"
 )
 
+// Executor is the minimal interface satisfied by both CircuitBreaker and
+// DistributedCircuitBreaker. Middleware and adapters should accept Executor
+// rather than the concrete *CircuitBreaker so they work transparently with
+// either implementation.
+type Executor interface {
+	Execute(ctx context.Context, fn func(context.Context) error) error
+}
+
 // CircuitBreaker implements the circuit breaker pattern.
 // All methods are safe for concurrent use.
 type CircuitBreaker struct {
@@ -200,12 +208,7 @@ func (cb *CircuitBreaker) beforeExecute() (acquiredProbe bool, err error) {
 	case StateOpen:
 		// Check if we should transition to HalfOpen (lazy)
 		if !cb.shouldAttemptReset() {
-			return false, &CircuitError{
-				Name:              cb.cfg.Name,
-				State:             state,
-				TimeUntilHalfOpen: cb.timeUntilHalfOpen(),
-				Err:               ErrCircuitOpen,
-			}
+			return false, newCircuitError(cb.cfg.Name, state, cb.timeUntilHalfOpen(), ErrCircuitOpen)
 		}
 		// Transition to HalfOpen
 		cb.transitionToHalfOpen()
@@ -227,7 +230,7 @@ func (cb *CircuitBreaker) beforeExecute() (acquiredProbe bool, err error) {
 				allowed = cb.cfg.HalfOpenMaxRequests
 			}
 			if cur >= int64(allowed) {
-				return false, &CircuitError{Name: cb.cfg.Name, State: state, Err: ErrTooManyRequests}
+				return false, newCircuitError(cb.cfg.Name, state, 0, ErrTooManyRequests)
 			}
 			if cb.halfOpenInflight.CompareAndSwap(cur, cur+1) {
 				break

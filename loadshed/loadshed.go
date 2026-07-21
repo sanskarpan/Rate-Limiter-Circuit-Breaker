@@ -83,8 +83,6 @@ const (
 // is never shed: even a runaway overload leaves the top tier a chance.
 const priorityCeil = PriorityCritical
 
-// Config tunes the CoDel controller. The zero value is not usable directly; use
-// New, which fills unset fields with the Default* values.
 // Config configures a Shedder.
 //
 // Zero value: the zero Config is valid. loadshed.New(Config{}) fills every unset

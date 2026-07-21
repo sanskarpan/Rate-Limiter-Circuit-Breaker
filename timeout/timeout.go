@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-// ErrTimeout is returned when an operation exceeds the configured timeout.
-// It wraps context.DeadlineExceeded so callers can use errors.Is.
-var ErrTimeout = context.DeadlineExceeded
-
 // TimeoutError is returned by Do / DoWithResult when fn does not complete before
 // the deadline. It implements error and unwraps to context.DeadlineExceeded so
 // that errors.Is(err, context.DeadlineExceeded) and
@@ -105,6 +101,14 @@ func DoWithResult[T any](ctx context.Context, d time.Duration, fn func(context.C
 }
 
 // Timeout is a configurable timeout wrapper that can be reused.
+//
+// For operations that return a typed result in addition to an error, use the
+// package-level ExecuteWithResult helper. For example:
+//
+//	t := timeout.New(5 * time.Second)
+//	val, err := timeout.ExecuteWithResult(t, ctx, func(ctx context.Context) (MyType, error) {
+//	    return fetchSomething(ctx)
+//	})
 type Timeout struct {
 	duration time.Duration
 }
@@ -126,4 +130,12 @@ func (t *Timeout) Do(ctx context.Context, fn func(context.Context) error) error 
 // Duration returns the configured timeout duration.
 func (t *Timeout) Duration() time.Duration {
 	return t.duration
+}
+
+// ExecuteWithResult executes fn through t with the configured timeout and
+// returns a typed result. Because Go does not allow generic methods,
+// this is a package-level function rather than a method on *Timeout.
+// Semantics are identical to DoWithResult.
+func ExecuteWithResult[T any](t *Timeout, ctx context.Context, fn func(context.Context) (T, error)) (T, error) {
+	return DoWithResult[T](ctx, t.duration, fn)
 }

@@ -44,25 +44,25 @@ var ErrScriptUnsupported = errors.New("memcached: script not supported (requires
 // Unsupported (returns ErrScriptUnsupported): SlidingWindowCounter and all
 // CircuitBreaker scripts — they require atomic access to more than one key, which
 // Memcached cannot provide.
-func (m *Memcached) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
-	switch script {
-	case store.TokenBucketScript:
+func (m *Memcached) Eval(ctx context.Context, scriptID store.ScriptID, keys []string, args ...any) (any, error) {
+	switch scriptID {
+	case store.TokenBucketScriptID:
 		return m.evalTokenBucket(ctx, keys, args)
-	case store.FixedWindowScript:
+	case store.FixedWindowScriptID:
 		return m.evalFixedWindow(ctx, keys, args)
-	case store.GCRAScript:
+	case store.GCRAScriptID:
 		return m.evalGCRA(ctx, keys, args)
-	case store.LeakyBucketScript:
+	case store.LeakyBucketScriptID:
 		return m.evalLeakyBucket(ctx, keys, args)
-	case store.SlidingWindowLogScript:
+	case store.SlidingWindowLogScriptID:
 		return m.evalSlidingWindowLog(ctx, keys, args)
-	case store.SlidingWindowCounterScript,
-		store.CircuitBreakerAcquireScript,
-		store.CircuitBreakerRecordScript,
-		store.CircuitBreakerReadScript:
+	case store.SlidingWindowCounterScriptID,
+		store.CircuitBreakerAcquireScriptID,
+		store.CircuitBreakerRecordScriptID,
+		store.CircuitBreakerReadScriptID:
 		return nil, ErrScriptUnsupported
 	default:
-		return nil, fmt.Errorf("memcached eval: %w", ErrScriptUnsupported)
+		return nil, fmt.Errorf("memcached eval %q: %w", scriptID, ErrScriptUnsupported)
 	}
 }
 
@@ -127,6 +127,7 @@ func toStr(v any) string {
 // is returned immediately (used by deny paths that must not persist state).
 func (m *Memcached) casMutate(
 	ctx context.Context,
+	scriptID store.ScriptID,
 	key string,
 	compute func(raw string, exists bool) (newVal string, exp int32, write bool, result any, err error),
 ) (any, error) {
@@ -136,7 +137,7 @@ func (m *Memcached) casMutate(
 		exists := gerr == nil
 		if gerr != nil && !errors.Is(gerr, memcache.ErrCacheMiss) {
 			if isConnError(gerr) {
-				return m.opts.Fallback.Eval(ctx, scriptKeyMarker, []string{key})
+				return m.opts.Fallback.Eval(ctx, scriptID, []string{key})
 			}
 			return nil, fmt.Errorf("memcached eval get %q: %w", key, gerr)
 		}
@@ -160,7 +161,7 @@ func (m *Memcached) casMutate(
 				continue // raced; retry as CAS
 			}
 			if isConnError(addErr) {
-				return m.opts.Fallback.Eval(ctx, scriptKeyMarker, []string{key})
+				return m.opts.Fallback.Eval(ctx, scriptID, []string{key})
 			}
 			return nil, fmt.Errorf("memcached eval add %q: %w", key, addErr)
 		}
@@ -174,20 +175,14 @@ func (m *Memcached) casMutate(
 			continue
 		}
 		if isConnError(casErr) {
-			return m.opts.Fallback.Eval(ctx, scriptKeyMarker, []string{key})
+			return m.opts.Fallback.Eval(ctx, scriptID, []string{key})
 		}
 		return nil, fmt.Errorf("memcached eval cas %q: %w", key, casErr)
 	}
 	return nil, fmt.Errorf("memcached eval %q: %w", key, ErrCASExhausted)
 }
 
-// scriptKeyMarker is a sentinel body used only to route a fallback Eval; the
-// fallback is a memory store with the default scripts registered, but we never
-// actually reach it with this marker under normal operation — connection-error
-// fallback for Eval is best-effort and simply denies via an unregistered-script
-// error, matching the fail-closed contract. It is intentionally not a real
-// script.
-const scriptKeyMarker = "__memcached_eval_fallback__"
+
 
 // ---------------------------------------------------------------------------
 // Token bucket (mirrors store.TokenBucketScript / tokenBucketHandler)
@@ -232,7 +227,7 @@ func (m *Memcached) evalTokenBucket(ctx context.Context, keys []string, args []a
 	}
 	exp := ttlToSeconds(time.Duration(ttlMs) * time.Millisecond)
 
-	return m.casMutate(ctx, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
+	return m.casMutate(ctx, store.TokenBucketScriptID, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
 		tokens := capacity
 		lastRefill := now
 		if raw != "" {
@@ -303,7 +298,7 @@ func (m *Memcached) evalFixedWindow(ctx context.Context, keys []string, args []a
 	}
 	exp := ttlToSeconds(time.Duration(ttlMs) * time.Millisecond)
 
-	return m.casMutate(ctx, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
+	return m.casMutate(ctx, store.FixedWindowScriptID, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
 		current := parseCounter(raw)
 		if current+n > limit {
 			// Deny: do NOT write (leaves TTL/count untouched, matching Redis).
@@ -362,7 +357,7 @@ func (m *Memcached) evalGCRA(ctx context.Context, keys []string, args []any) (an
 	}
 	exp := ttlToSeconds(time.Duration(ttlMs) * time.Millisecond)
 
-	return m.casMutate(ctx, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
+	return m.casMutate(ctx, store.GCRAScriptID, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
 		nowF := float64(now)
 		storedF := nowF
 		if raw != "" {
@@ -431,7 +426,7 @@ func (m *Memcached) evalLeakyBucket(ctx context.Context, keys []string, args []a
 		return di
 	}
 
-	return m.casMutate(ctx, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
+	return m.casMutate(ctx, store.LeakyBucketScriptID, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
 		nowF := float64(now)
 		storedF := nowF
 		if raw != "" {
@@ -496,7 +491,7 @@ func (m *Memcached) evalSlidingWindowLog(ctx context.Context, keys []string, arg
 	// Deny path uses ceil(ttl_ms/1000)*1000 ms in the Redis script; convert.
 	denyExp := ttlToSeconds(time.Duration(int64(math.Ceil(float64(ttlMs)/1000.0))*1000) * time.Millisecond)
 
-	return m.casMutate(ctx, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
+	return m.casMutate(ctx, store.SlidingWindowLogScriptID, keys[0], func(raw string, _ bool) (string, int32, bool, any, error) {
 		nowScore := int64(float64(nowNs))
 		zs := parseZSet(raw)
 		cutoff := int64(float64(nowNs) - float64(windowNs))

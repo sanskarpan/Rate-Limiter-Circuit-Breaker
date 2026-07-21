@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
@@ -100,10 +99,9 @@ func ExampleDoWithResult() {
 
 // ExamplePolicy_Do_fullJitter demonstrates the Full Jitter backoff strategy.
 func ExamplePolicy_Do_fullJitter() {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p := &retry.Policy{
 		MaxAttempts: 5,
-		Backoff:     backoff.FullJitter(100*time.Millisecond, 5*time.Second, rng),
+		Backoff:     backoff.FullJitter(100*time.Millisecond, 5*time.Second),
 	}
 	_ = p
 	fmt.Println("full jitter policy ready")
@@ -113,10 +111,9 @@ func ExamplePolicy_Do_fullJitter() {
 
 // ExamplePolicy_Do_decorrelated demonstrates the AWS Decorrelated Jitter strategy.
 func ExamplePolicy_Do_decorrelated() {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p := &retry.Policy{
 		MaxAttempts: 8,
-		Backoff:     backoff.Decorrelated(100*time.Millisecond, 10*time.Second, rng),
+		Backoff:     backoff.Decorrelated(100*time.Millisecond, 10*time.Second),
 	}
 	_ = p
 	fmt.Println("decorrelated jitter policy ready")

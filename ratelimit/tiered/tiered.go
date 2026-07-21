@@ -2,6 +2,7 @@ package tiered
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -117,30 +118,26 @@ func WithOnDecision(fn func(key string, r ratelimit.Result)) Option {
 	}
 }
 
-// New creates a TieredLimiter enforcing the given tiers in order, from most
-// specific to least specific. Options may be interleaved with tiers in any
-// position. It panics if any provided Tier has a nil Limiter, since such a tier
-// can never produce a working decision.
-func New(args ...any) *TieredLimiter {
+// New creates a TieredLimiter enforcing tiers in order, from most specific to
+// least specific. It panics if any Tier has a nil Limiter, since such a tier
+// can never produce a working decision. A nil KeyFunc on a Tier is silently
+// replaced with the identity function (the request key is used as-is).
+func New(tiers []Tier, opts ...Option) *TieredLimiter {
 	t := &TieredLimiter{
 		clock: clock.RealClock{},
 		rec:   metric.Default(),
 	}
-	for _, a := range args {
-		switch v := a.(type) {
-		case Tier:
-			if v.Limiter == nil {
-				panic(fmt.Sprintf("tiered.New: tier %q has a nil Limiter", v.Name))
-			}
-			if v.KeyFunc == nil {
-				v.KeyFunc = identity
-			}
-			t.tiers = append(t.tiers, v)
-		case Option:
-			v(t)
-		default:
-			panic(fmt.Sprintf("tiered.New: unexpected argument of type %T (want tiered.Tier or tiered.Option)", a))
+	for _, tier := range tiers {
+		if tier.Limiter == nil {
+			panic(fmt.Sprintf("tiered.New: tier %q has a nil Limiter", tier.Name))
 		}
+		if tier.KeyFunc == nil {
+			tier.KeyFunc = identity
+		}
+		t.tiers = append(t.tiers, tier)
+	}
+	for _, opt := range opts {
+		opt(t)
 	}
 	return t
 }
@@ -370,17 +367,14 @@ func (t *TieredLimiter) Peek(ctx context.Context, key string) ratelimit.State {
 // Reset resets state for the given key across every tier, using each tier's
 // derived key. Errors from individual tiers are joined.
 func (t *TieredLimiter) Reset(ctx context.Context, key string) error {
-	var errs []string
+	var errs []error
 	for i := range t.tiers {
 		tk := t.tiers[i].KeyFunc(key)
 		if err := t.tiers[i].Limiter.Reset(ctx, tk); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", t.tierName(i), err))
+			errs = append(errs, fmt.Errorf("%s: %w", t.tierName(i), err))
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("tiered reset errors: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Close closes every underlying tier limiter. Errors are joined. Note that if
@@ -388,16 +382,13 @@ func (t *TieredLimiter) Reset(ctx context.Context, key string) error {
 // callers should avoid sharing limiter instances across tiers if that is a
 // problem for the underlying implementation.
 func (t *TieredLimiter) Close() error {
-	var errs []string
+	var errs []error
 	for i := range t.tiers {
 		if err := t.tiers[i].Limiter.Close(); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", t.tierName(i), err))
+			errs = append(errs, fmt.Errorf("%s: %w", t.tierName(i), err))
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("tiered close errors: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // record fires the configured metric.Recorder for a completed decision.

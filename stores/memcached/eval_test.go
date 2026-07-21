@@ -45,7 +45,7 @@ func TestEvalTokenBucket(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 5; i++ {
-		res, err := s.Eval(ctx, store.TokenBucketScript, []string{"tb"},
+		res, err := s.Eval(ctx, store.TokenBucketScriptID, []string{"tb"},
 			capacity, refillRate, int64(1), now, ttlMs, "0")
 		if err != nil {
 			t.Fatalf("Eval token bucket: %v", err)
@@ -72,19 +72,19 @@ func TestEvalTokenBucketRefill(t *testing.T) {
 
 	// Drain the bucket.
 	for i := 0; i < 2; i++ {
-		res, _ := s.Eval(ctx, store.TokenBucketScript, []string{"tb"}, capacity, refillRate, int64(1), now, ttlMs, "0")
+		res, _ := s.Eval(ctx, store.TokenBucketScriptID, []string{"tb"}, capacity, refillRate, int64(1), now, ttlMs, "0")
 		if asIntSlice(t, res)[0] != 1 {
 			t.Fatalf("expected admit %d", i)
 		}
 	}
 	// Now empty: deny.
-	res, _ := s.Eval(ctx, store.TokenBucketScript, []string{"tb"}, capacity, refillRate, int64(1), now, ttlMs, "0")
+	res, _ := s.Eval(ctx, store.TokenBucketScriptID, []string{"tb"}, capacity, refillRate, int64(1), now, ttlMs, "0")
 	if asIntSlice(t, res)[0] != 0 {
 		t.Fatal("expected deny on empty bucket")
 	}
 	// Advance 1 second → 1 token refilled → admit.
 	later := now + int64(time.Second)
-	res, _ = s.Eval(ctx, store.TokenBucketScript, []string{"tb"}, capacity, refillRate, int64(1), later, ttlMs, "0")
+	res, _ = s.Eval(ctx, store.TokenBucketScriptID, []string{"tb"}, capacity, refillRate, int64(1), later, ttlMs, "0")
 	if asIntSlice(t, res)[0] != 1 {
 		t.Fatal("expected admit after refill")
 	}
@@ -93,7 +93,7 @@ func TestEvalTokenBucketRefill(t *testing.T) {
 func TestEvalTokenBucketRefillRateZeroFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(newFakeMemcache())
-	_, err := s.Eval(ctx, store.TokenBucketScript, []string{"tb"}, 3.0, 0.0, int64(1), int64(1), int64(1000), "0")
+	_, err := s.Eval(ctx, store.TokenBucketScriptID, []string{"tb"}, 3.0, 0.0, int64(1), int64(1), int64(1000), "0")
 	if err == nil {
 		t.Fatal("expected error for refillRate <= 0 (fail closed)")
 	}
@@ -109,7 +109,7 @@ func TestEvalFixedWindow(t *testing.T) {
 	ttlMs := int64(1000)
 
 	for i := 1; i <= 3; i++ {
-		res, err := s.Eval(ctx, store.FixedWindowScript, []string{"fw"}, limit, int64(1), ttlMs)
+		res, err := s.Eval(ctx, store.FixedWindowScriptID, []string{"fw"}, limit, int64(1), ttlMs)
 		if err != nil {
 			t.Fatalf("Eval fixed window: %v", err)
 		}
@@ -119,13 +119,13 @@ func TestEvalFixedWindow(t *testing.T) {
 		}
 	}
 	// Over limit: deny, count stays 3.
-	res, _ := s.Eval(ctx, store.FixedWindowScript, []string{"fw"}, limit, int64(1), ttlMs)
+	res, _ := s.Eval(ctx, store.FixedWindowScriptID, []string{"fw"}, limit, int64(1), ttlMs)
 	out := asIntSlice(t, res)
 	if out[0] != 0 || out[1] != 3 {
 		t.Fatalf("over limit: got %v, want deny count=3", out)
 	}
 	// AllowN larger than limit must not poison the window.
-	res, _ = s.Eval(ctx, store.FixedWindowScript, []string{"fw"}, limit, int64(10), ttlMs)
+	res, _ = s.Eval(ctx, store.FixedWindowScriptID, []string{"fw"}, limit, int64(10), ttlMs)
 	if asIntSlice(t, res)[0] != 0 {
 		t.Fatal("AllowN over limit should deny")
 	}
@@ -143,7 +143,7 @@ func TestEvalGCRA(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 5; i++ {
-		res, err := s.Eval(ctx, store.GCRAScript, []string{"g"}, emission, burst, int64(1), now, ttlMs, "0")
+		res, err := s.Eval(ctx, store.GCRAScriptID, []string{"g"}, emission, burst, int64(1), now, ttlMs, "0")
 		if err != nil {
 			t.Fatalf("Eval GCRA: %v", err)
 		}
@@ -169,7 +169,7 @@ func TestEvalLeakyBucket(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 6; i++ {
-		res, err := s.Eval(ctx, store.LeakyBucketScript, []string{"lb"}, emission, capacity, int64(1), now, ttlMs, "0")
+		res, err := s.Eval(ctx, store.LeakyBucketScriptID, []string{"lb"}, emission, capacity, int64(1), now, ttlMs, "0")
 		if err != nil {
 			t.Fatalf("Eval leaky bucket: %v", err)
 		}
@@ -197,7 +197,7 @@ func TestEvalSlidingWindowLog(t *testing.T) {
 		// Distinct entry IDs per call, exactly as the real distributed limiter
 		// supplies (otherwise identical member names would collapse in the ZSET).
 		entryID := "entry-" + string(rune('a'+i))
-		res, err := s.Eval(ctx, store.SlidingWindowLogScript, []string{"swl"},
+		res, err := s.Eval(ctx, store.SlidingWindowLogScriptID, []string{"swl"},
 			limit, windowNs, now, entryID, ttlMs, int64(1), "0")
 		if err != nil {
 			t.Fatalf("Eval sliding window log: %v", err)
@@ -212,7 +212,7 @@ func TestEvalSlidingWindowLog(t *testing.T) {
 
 	// Advance past the window: entries expire, admit again.
 	later := now + windowNs + 1
-	res, _ := s.Eval(ctx, store.SlidingWindowLogScript, []string{"swl"},
+	res, _ := s.Eval(ctx, store.SlidingWindowLogScriptID, []string{"swl"},
 		limit, windowNs, later, "entry2", ttlMs, int64(1), "0")
 	if asIntSlice(t, res)[0] != 1 {
 		t.Fatal("expected admit after window slid past old entries")
@@ -224,11 +224,11 @@ func TestEvalUnsupportedScripts(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(newFakeMemcache())
 
-	for _, sc := range []string{
-		store.SlidingWindowCounterScript,
-		store.CircuitBreakerAcquireScript,
-		store.CircuitBreakerRecordScript,
-		store.CircuitBreakerReadScript,
+	for _, sc := range []store.ScriptID{
+		store.SlidingWindowCounterScriptID,
+		store.CircuitBreakerAcquireScriptID,
+		store.CircuitBreakerRecordScriptID,
+		store.CircuitBreakerReadScriptID,
 	} {
 		_, err := s.Eval(ctx, sc, []string{"a", "b"}, int64(1))
 		if !errors.Is(err, ErrScriptUnsupported) {
@@ -236,7 +236,7 @@ func TestEvalUnsupportedScripts(t *testing.T) {
 		}
 	}
 
-	_, err := s.Eval(ctx, "unknown body", []string{"a"})
+	_, err := s.Eval(ctx, store.NewScriptID("unknown body"), []string{"a"})
 	if !errors.Is(err, ErrScriptUnsupported) {
 		t.Fatalf("unknown script: expected ErrScriptUnsupported, got %v", err)
 	}

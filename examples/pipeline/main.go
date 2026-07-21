@@ -12,7 +12,6 @@ import (
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/bulkhead"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/circuitbreaker"
-	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/pipeline"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/retry"
@@ -21,7 +20,7 @@ import (
 
 func main() {
 	// 1. Create individual components.
-	limiter := tokenbucket.New(10, 20, tokenbucket.WithClock(clock.RealClock{}))
+	limiter := tokenbucket.New(10, 20)
 	defer limiter.Close()
 
 	bh := bulkhead.New(5, 100*time.Millisecond)
@@ -32,12 +31,11 @@ func main() {
 		WindowSize:       10,
 		FailureThreshold: 3,
 		OpenTimeout:      5 * time.Second,
-		Clock:            clock.RealClock{},
 	})
 
 	retryPolicy := &retry.Policy{
 		MaxAttempts: 3,
-		Backoff:     backoff.Exponential(100*time.Millisecond, 2.0),
+		Backoff:     backoff.Exponential(100*time.Millisecond, 2*time.Second),
 		RetryIf: func(err error) bool {
 			// Only retry transient errors, not permanent failures
 			return !errors.Is(err, pipeline.ErrRateLimited)

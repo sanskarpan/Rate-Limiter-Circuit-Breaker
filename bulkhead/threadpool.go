@@ -150,15 +150,8 @@ func (tp *ThreadPool) Close() {
 	tp.wg.Wait()
 }
 
-// Pending returns the number of tasks currently buffered in the queue that have
-// been accepted but not yet picked up by a worker (queue saturation). A worker
-// executing a task no longer counts as pending; see Busy for that.
-func (tp *ThreadPool) Pending() int {
-	return len(tp.queue)
-}
-
-// QueueDepth is an alias for Pending expressed in queueing terms: the number of
-// queued-but-not-started tasks.
+// QueueDepth returns the number of tasks buffered in the queue that have been
+// accepted but not yet picked up by a worker.
 func (tp *ThreadPool) QueueDepth() int {
 	return len(tp.queue)
 }

@@ -33,6 +33,19 @@ import (
 
 const algorithmName = "token_bucket"
 
+// FractionalLimiter extends ratelimit.Limiter with a fractional-cost variant
+// of AllowN. TokenBucket is the only built-in implementation; other algorithms
+// that use integer-only internal state do not implement this interface.
+// Consumers that require non-integer cost accounting should accept
+// FractionalLimiter rather than type-asserting to *TokenBucket.
+type FractionalLimiter interface {
+	ratelimit.Limiter
+	AllowCost(ctx context.Context, key string, cost float64) ratelimit.Result
+}
+
+// Compile-time assertion: *TokenBucket must satisfy FractionalLimiter.
+var _ FractionalLimiter = (*TokenBucket)(nil)
+
 // bucket holds per-key state.
 type bucket struct {
 	mu         sync.Mutex

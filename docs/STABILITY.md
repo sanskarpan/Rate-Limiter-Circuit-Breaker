@@ -3,33 +3,11 @@
 This document defines what "stable" means for this project, how versions are
 numbered, what the **public API** surface is, and how deprecations are handled.
 
-## Current status: pre-1.0 (`v0.x`)
+## Current status: stable (v1.x)
 
-The latest tagged release is **`v0.1.0`**. The project is **pre-1.0**.
-
-Under [Semantic Versioning](https://semver.org/), the major-version-zero clause
-applies: **anything MAY change in any `0.x` release.** In practice we try to be
-conservative, but while the module is `v0.x`:
-
-- **Minor** releases (`v0.1.0` → `v0.2.0`) **may contain breaking API changes.**
-- **Patch** releases (`v0.1.0` → `v0.1.1`) are intended to be
-  backward-compatible bug/security fixes only.
-
-**Pin a specific version in your `go.mod`** for reproducible builds, and read the
-[CHANGELOG.md](../CHANGELOG.md) before upgrading a minor version. This mirrors the
-note in the [README](../README.md#api-stability).
-
-## Post-1.0 intentions (SemVer)
-
-Once a `v1.0.0` release exists, the project will follow SemVer strictly for the
-**public API** (defined below), consistent with the
-[Go module compatibility guidelines](https://go.dev/blog/module-compatibility):
-
-- **MAJOR** (`v1` → `v2`): breaking changes to the public API. A new major
-  version ships as a new module path (`.../v2`), per Go's import-compatibility
-  rule.
-- **MINOR** (`v1.0` → `v1.1`): backward-compatible additions (new packages,
-  new exported identifiers, new optional functional options).
+The latest tagged release is **`v1.0.0`**. The project follows [Semantic Versioning](https://semver.org/) strictly for the public API (defined below), consistent with the [Go module compatibility guidelines](https://go.dev/blog/module-compatibility):
+- **MAJOR** (`v1` → `v2`): breaking changes to the public API. A new major version ships as a new module path (`.../v2`), per Go's import-compatibility rule.
+- **MINOR** (`v1.0` → `v1.1`): backward-compatible additions (new packages, new exported identifiers, new optional functional options).
 - **PATCH** (`v1.0.0` → `v1.0.1`): backward-compatible bug and security fixes.
 
 ## What "public API" means
@@ -77,7 +55,7 @@ the `contrib` module version separately in your `go.mod`.
 
 ## Deprecation policy
 
-When an exported identifier is slated for removal (post-1.0):
+When an exported identifier is slated for removal:
 
 1. It is marked with a `// Deprecated:` doc comment (the convention `gopls`,
    `staticcheck`, and pkg.go.dev recognize) that names the replacement.
@@ -85,8 +63,4 @@ When an exported identifier is slated for removal (post-1.0):
    deprecation is announced.
 3. The deprecation is recorded in [CHANGELOG.md](../CHANGELOG.md).
 4. Removal happens no sooner than the **next minor release** after the notice
-   (post-1.0, removals that break compatibility are deferred to the next major).
-
-While pre-1.0, we still aim to give a one-minor-version deprecation window as a
-courtesy, but reserve the right to remove deprecated pre-1.0 API sooner if it is
-clearly unused or actively harmful.
+   (removals that break compatibility are deferred to the next major).

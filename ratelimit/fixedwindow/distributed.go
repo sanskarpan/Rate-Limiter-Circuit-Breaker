@@ -8,6 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+// distributedAlgorithmName is the algorithm label emitted in Result fields.
+const distributedAlgorithmName = "distributed_fixed_window"
+
 
 // DistributedFixedWindow is a Redis-backed fixed window counter.
 // Uses atomic INCR + EXPIRE for O(1) performance.
@@ -51,10 +54,10 @@ func (d *DistributedFixedWindow) Allow(ctx context.Context, key string) ratelimi
 func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
 	// Validate inputs to match the local FixedWindowCounter (reject bad keys/n<1).
 	if err := ratelimit.ValidateKey(key); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_fixed_window"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedAlgorithmName}
 	}
 	if err := ratelimit.ValidateN(n); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_fixed_window"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedAlgorithmName}
 	}
 
 	now := time.Now()
@@ -71,7 +74,7 @@ func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) 
 	// request. FixedWindowScript only increments when the request fits, so a
 	// rejected AllowN leaves the counter untouched.
 	ttlMs := (d.window * 2).Milliseconds()
-	result, err := d.store.Eval(ctx, store.FixedWindowScript,
+	result, err := d.store.Eval(ctx, store.FixedWindowScriptID,
 		[]string{wKey},
 		d.limit, n, ttlMs,
 	)
@@ -79,7 +82,7 @@ func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_fixed_window",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 
@@ -88,7 +91,7 @@ func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) 
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_fixed_window",
+			Algorithm: distributedAlgorithmName,
 		}
 	}
 	allowed, _ := arr[0].(int64)
@@ -101,7 +104,7 @@ func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) 
 			Remaining:  0,
 			RetryAfter: retryAfter,
 			ResetAfter: retryAfter,
-			Algorithm:  "distributed_fixed_window",
+			Algorithm:  distributedAlgorithmName,
 		}
 	}
 
@@ -114,7 +117,7 @@ func (d *DistributedFixedWindow) AllowN(ctx context.Context, key string, n int) 
 		Limit:      d.limit,
 		Remaining:  remaining,
 		ResetAfter: retryAfter,
-		Algorithm:  "distributed_fixed_window",
+		Algorithm:  distributedAlgorithmName,
 	}
 }
 
@@ -151,7 +154,7 @@ func (d *DistributedFixedWindow) WaitN(ctx context.Context, key string, n int) e
 func (d *DistributedFixedWindow) Peek(ctx context.Context, key string) ratelimit.State {
 	return ratelimit.State{
 		Key:       key,
-		Algorithm: "distributed_fixed_window",
+		Algorithm: distributedAlgorithmName,
 		Limit:     d.limit,
 	}
 }

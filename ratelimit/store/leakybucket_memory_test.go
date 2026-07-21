@@ -28,7 +28,7 @@ func TestMemory_LeakyBucket_AdmitThenDeny(t *testing.T) {
 	allowed := 0
 	var lastDepth int64
 	for i := 0; i < 6; i++ {
-		res, err := m.Eval(ctx, store.LeakyBucketScript,
+		res, err := m.Eval(ctx, store.LeakyBucketScriptID,
 			[]string{"lb:k"},
 			emission, capacity, int64(1), nowNs, ttlMs, 0,
 		)
@@ -67,7 +67,7 @@ func TestMemory_LeakyBucket_ServerTimeParity(t *testing.T) {
 	run := func(m *store.Memory, useServerTime int) (allowed int) {
 		nowNs := int64(6_000_000_000_000_000)
 		for i := 0; i < 6; i++ {
-			res, err := m.Eval(ctx, store.LeakyBucketScript,
+			res, err := m.Eval(ctx, store.LeakyBucketScriptID,
 				[]string{"lb:parity"},
 				emission, capacity, int64(1), nowNs, ttlMs, useServerTime,
 			)
@@ -106,17 +106,17 @@ func TestMemory_LeakyBucket_DenyDoesNotPersist(t *testing.T) {
 	base := int64(7_000_000_000_000_000)
 
 	// Fill the single slot at t=base.
-	res, _ := m.Eval(ctx, store.LeakyBucketScript, []string{"lb:np"}, emission, capacity, int64(1), base, ttlMs, 0)
+	res, _ := m.Eval(ctx, store.LeakyBucketScriptID, []string{"lb:np"}, emission, capacity, int64(1), base, ttlMs, 0)
 	if res.([]any)[0].(int64) != 1 {
 		t.Fatal("first request should be admitted")
 	}
 	// Immediately deny (queue full).
-	res, _ = m.Eval(ctx, store.LeakyBucketScript, []string{"lb:np"}, emission, capacity, int64(1), base, ttlMs, 0)
+	res, _ = m.Eval(ctx, store.LeakyBucketScriptID, []string{"lb:np"}, emission, capacity, int64(1), base, ttlMs, 0)
 	if res.([]any)[0].(int64) != 0 {
 		t.Fatal("second immediate request should be denied")
 	}
 	// One emission interval later, exactly one slot has drained → admit again.
-	res, _ = m.Eval(ctx, store.LeakyBucketScript, []string{"lb:np"}, emission, capacity, int64(1), base+emission, ttlMs, 0)
+	res, _ = m.Eval(ctx, store.LeakyBucketScriptID, []string{"lb:np"}, emission, capacity, int64(1), base+emission, ttlMs, 0)
 	if res.([]any)[0].(int64) != 1 {
 		t.Fatal("request one interval later should be admitted (a slot drained)")
 	}

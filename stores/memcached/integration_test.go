@@ -79,7 +79,7 @@ func TestIntegrationTokenBucket(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 5; i++ {
-		res, err := s.Eval(ctx, store.TokenBucketScript, []string{key},
+		res, err := s.Eval(ctx, store.TokenBucketScriptID, []string{key},
 			capacity, refillRate, int64(1), now, ttlMs, "0")
 		if err != nil {
 			t.Fatalf("Eval: %v", err)

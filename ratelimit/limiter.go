@@ -5,7 +5,7 @@
 //
 // Quick start:
 //
-//	limiter := tokenbucket.New(100, 10, tokenbucket.WithBurst(20))
+//	limiter := tokenbucket.New(100, 10, tokenbucket.WithIdleCleanup(5*time.Minute))
 //	result := limiter.Allow(ctx, "user:123")
 //	if !result.Allowed {
 //	    http.Error(w, "rate limited", http.StatusTooManyRequests)
@@ -42,6 +42,21 @@ type Limiter interface {
 
 	// Close releases all resources.
 	Close() error
+}
+
+// PriorityLimiter is an optional extension of Limiter for algorithms that
+// support per-request priority scheduling. Higher priority values are served
+// before lower ones under contention on the same key; within a single priority
+// level requests are served in FIFO order.
+//
+// Callers that need priority-aware methods should accept PriorityLimiter
+// rather than type-asserting to a concrete type.
+type PriorityLimiter interface {
+	Limiter
+	// AllowP is the priority-aware form of Allow.
+	AllowP(ctx context.Context, key string, priority int) Result
+	// WaitP is the priority-aware form of Wait.
+	WaitP(ctx context.Context, key string, priority int) error
 }
 
 // Result is returned by Allow and AllowN.

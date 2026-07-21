@@ -23,12 +23,13 @@ func TestComposite_OnDecisionHook(t *testing.T) {
 
 	var keys []string
 	var results []ratelimit.Result
-	comp := composite.New(composite.AND, limA, limB).
-		WithClock(clk).
-		WithOnDecision(func(key string, r ratelimit.Result) {
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB},
+		composite.WithClock(clk),
+		composite.WithOnDecision(func(key string, r ratelimit.Result) {
 			keys = append(keys, key)
 			results = append(results, r)
-		})
+		}),
+	)
 	defer comp.Close()
 
 	ctx := context.Background()

@@ -3,7 +3,6 @@ package retry_test
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -391,8 +390,7 @@ func TestRetry_FullJitter_Distribution(t *testing.T) {
 	// Statistical test: run many single-retry policies and confirm mean delay ≈ cap/2.
 	// We use zero MaxAttempts=2 and constant failure, collecting delays via OnRetry.
 	capDur := 1000 * time.Millisecond
-	rng := rand.New(rand.NewSource(2024))
-	b := backoff.FullJitter(1*time.Millisecond, capDur, rng)
+	b := backoff.FullJitter(1*time.Millisecond, capDur)
 
 	const samples = 10_000
 	var totalDelay time.Duration
@@ -412,10 +410,9 @@ func TestRetry_FullJitter_Distribution(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRetry_DecorrelatedJitter_NoBoundExplosion(t *testing.T) {
-	rng := rand.New(rand.NewSource(9999))
 	base := 100 * time.Millisecond
 	capDur := 2 * time.Second
-	b := backoff.Decorrelated(base, capDur, rng)
+	b := backoff.Decorrelated(base, capDur)
 
 	for i := 0; i < 10_000; i++ {
 		got := b.Next(i)

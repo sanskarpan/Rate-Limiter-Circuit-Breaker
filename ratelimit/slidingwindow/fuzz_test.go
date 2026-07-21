@@ -100,7 +100,7 @@ func FuzzSlidingWindowCounter(f *testing.F) {
 		window := time.Duration(windowNs)
 
 		clk := clock.NewManualClock(time.Unix(0, 0))
-		sw := slidingwindow.NewCounter(limit, window, slidingwindow.WithCounterClock(clk))
+		sw := slidingwindow.NewCounter(limit, window, slidingwindow.WithClock(clk))
 		defer sw.Close() //nolint:errcheck
 
 		ctx := context.Background()

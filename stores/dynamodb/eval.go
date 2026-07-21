@@ -29,32 +29,30 @@ var ErrOCCExhausted = errors.New("dynamodb: optimistic-concurrency retry limit e
 var ErrScriptUnsupported = errors.New("dynamodb: script not supported (requires multi-item atomicity; use Redis)")
 
 // Eval executes one of the known rate-limiting scripts as a single-item OCC
-// read-compute-conditional-write loop, dispatched by the exact script-body
-// constant (store.TokenBucketScript, etc.) exactly as the in-memory and
-// memcached stores do.
+// read-compute-conditional-write loop, dispatched by the ScriptID constant.
 //
 // Supported (single-item, portable): TokenBucket, GCRA, LeakyBucket, FixedWindow,
 // SlidingWindowLog. Unsupported: SlidingWindowCounter and the CircuitBreaker
 // scripts (ErrScriptUnsupported).
-func (d *DynamoDB) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
-	switch script {
-	case store.TokenBucketScript:
+func (d *DynamoDB) Eval(ctx context.Context, scriptID store.ScriptID, keys []string, args ...any) (any, error) {
+	switch scriptID {
+	case store.TokenBucketScriptID:
 		return d.evalTokenBucket(ctx, keys, args)
-	case store.FixedWindowScript:
+	case store.FixedWindowScriptID:
 		return d.evalFixedWindow(ctx, keys, args)
-	case store.GCRAScript:
+	case store.GCRAScriptID:
 		return d.evalGCRA(ctx, keys, args)
-	case store.LeakyBucketScript:
+	case store.LeakyBucketScriptID:
 		return d.evalLeakyBucket(ctx, keys, args)
-	case store.SlidingWindowLogScript:
+	case store.SlidingWindowLogScriptID:
 		return d.evalSlidingWindowLog(ctx, keys, args)
-	case store.SlidingWindowCounterScript,
-		store.CircuitBreakerAcquireScript,
-		store.CircuitBreakerRecordScript,
-		store.CircuitBreakerReadScript:
+	case store.SlidingWindowCounterScriptID,
+		store.CircuitBreakerAcquireScriptID,
+		store.CircuitBreakerRecordScriptID,
+		store.CircuitBreakerReadScriptID:
 		return nil, ErrScriptUnsupported
 	default:
-		return nil, fmt.Errorf("dynamodb eval: %w", ErrScriptUnsupported)
+		return nil, fmt.Errorf("dynamodb eval %q: %w", scriptID, ErrScriptUnsupported)
 	}
 }
 
@@ -119,6 +117,7 @@ func (d *DynamoDB) putIfVersion(
 // allow" scripts).
 func (d *DynamoDB) occ(
 	ctx context.Context,
+	scriptID store.ScriptID,
 	key string,
 	compute func(raw string) (newVal string, write bool, ttl time.Duration, result any, err error),
 ) (any, error) {
@@ -126,7 +125,7 @@ func (d *DynamoDB) occ(
 		item, err := d.getItem(ctx, key)
 		if err != nil {
 			if isConnError(err) {
-				return d.opts.Fallback.Eval(ctx, "__ddb_eval_fallback__", []string{key})
+				return d.opts.Fallback.Eval(ctx, scriptID, []string{key})
 			}
 			return nil, fmt.Errorf("dynamodb eval get %q: %w", key, err)
 		}
@@ -148,7 +147,7 @@ func (d *DynamoDB) occ(
 		}, item, ttl)
 		if err != nil {
 			if isConnError(err) {
-				return d.opts.Fallback.Eval(ctx, "__ddb_eval_fallback__", []string{key})
+				return d.opts.Fallback.Eval(ctx, scriptID, []string{key})
 			}
 			return nil, fmt.Errorf("dynamodb eval put %q: %w", key, err)
 		}
@@ -252,7 +251,7 @@ func (d *DynamoDB) evalTokenBucket(ctx context.Context, keys []string, args []an
 	}
 	ttl := time.Duration(ttlMs) * time.Millisecond
 
-	return d.occ(ctx, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
+	return d.occ(ctx, store.TokenBucketScriptID, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
 		tokens := capacity
 		lastRefill := now
 		if raw != "" {
@@ -317,7 +316,7 @@ func (d *DynamoDB) evalFixedWindow(ctx context.Context, keys []string, args []an
 	}
 	ttl := time.Duration(ttlMs) * time.Millisecond
 
-	return d.occ(ctx, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
+	return d.occ(ctx, store.FixedWindowScriptID, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
 		current := parseCounter(raw)
 		if current+n > limit {
 			return "", false, 0, []any{int64(0), current}, nil
@@ -371,7 +370,7 @@ func (d *DynamoDB) evalGCRA(ctx context.Context, keys []string, args []any) (any
 	}
 	ttl := time.Duration(ttlMs) * time.Millisecond
 
-	return d.occ(ctx, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
+	return d.occ(ctx, store.GCRAScriptID, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
 		nowF := float64(now)
 		storedF := nowF
 		if raw != "" {
@@ -436,7 +435,7 @@ func (d *DynamoDB) evalLeakyBucket(ctx context.Context, keys []string, args []an
 		return di
 	}
 
-	return d.occ(ctx, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
+	return d.occ(ctx, store.LeakyBucketScriptID, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
 		nowF := float64(now)
 		storedF := nowF
 		if raw != "" {
@@ -497,7 +496,7 @@ func (d *DynamoDB) evalSlidingWindowLog(ctx context.Context, keys []string, args
 	ttl := time.Duration(ttlMs) * time.Millisecond
 	denyTTL := time.Duration(int64(math.Ceil(float64(ttlMs)/1000.0))*1000) * time.Millisecond
 
-	return d.occ(ctx, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
+	return d.occ(ctx, store.SlidingWindowLogScriptID, keys[0], func(raw string) (string, bool, time.Duration, any, error) {
 		nowScore := int64(float64(nowNs))
 		zs := parseZSet(raw)
 		cutoff := int64(float64(nowNs) - float64(windowNs))

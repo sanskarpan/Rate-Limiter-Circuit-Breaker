@@ -229,8 +229,8 @@ func (al *AdaptiveLimiter) CurrentLimit() int {
 	return int(al.currentLimit.Load())
 }
 
-// ForceAdjust triggers an immediate adjustment cycle (useful for testing).
-func (al *AdaptiveLimiter) ForceAdjust() {
+// forceAdjust triggers an immediate adjustment cycle. Used by package tests.
+func (al *AdaptiveLimiter) forceAdjust() {
 	al.adjust()
 }
 
@@ -280,7 +280,7 @@ func (al *AdaptiveLimiter) adjustLoop() {
 // inner token bucket in place (H-12) — it never rebuilds the bucket, so per-key
 // token balances and in-flight Wait callers survive the adjustment.
 func (al *AdaptiveLimiter) adjust() {
-	// Serialize adjustments so concurrent ForceAdjust/tick cycles don't interleave
+	// Serialize adjustments so concurrent forceAdjust/tick cycles don't interleave
 	// their read-modify-write of currentLimit.
 	al.mu.Lock()
 	defer al.mu.Unlock()

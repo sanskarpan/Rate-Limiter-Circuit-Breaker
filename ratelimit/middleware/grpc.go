@@ -44,8 +44,8 @@ func GRPCKeyByMethod() GRPCKeyFunc {
 // to 1 so a call always consumes at least one token.
 type GRPCCostFunc func(ctx context.Context, fullMethod string) int
 
-// GRPCOptions configures gRPC interceptors.
-type GRPCOptions struct {
+// grpcOptions configures gRPC interceptors.
+type grpcOptions struct {
 	// KeyFunc extracts the rate-limit key from the context.
 	// Default: uses "" (global rate limit).
 	KeyFunc GRPCKeyFunc
@@ -60,10 +60,14 @@ type GRPCOptions struct {
 	SkipMethods []string
 }
 
+// GRPCOption is a functional option for configuring gRPC interceptors.
+// Use GRPCWithKeyFunc, GRPCWithCost, and GRPCWithSkipMethods to construct options.
+type GRPCOption func(*grpcOptions)
+
 // UnaryServerInterceptor returns a gRPC unary server interceptor that rate limits requests.
 // On rate limit: returns codes.ResourceExhausted with rate limit headers in response metadata.
-func UnaryServerInterceptor(limiter ratelimit.Limiter, opts ...func(*GRPCOptions)) grpc.UnaryServerInterceptor {
-	o := &GRPCOptions{}
+func UnaryServerInterceptor(limiter ratelimit.Limiter, opts ...GRPCOption) grpc.UnaryServerInterceptor {
+	o := &grpcOptions{}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -115,8 +119,8 @@ func grpcAllow(limiter ratelimit.Limiter, ctx context.Context, key string, cost 
 }
 
 // StreamServerInterceptor returns a gRPC stream server interceptor that rate limits requests.
-func StreamServerInterceptor(limiter ratelimit.Limiter, opts ...func(*GRPCOptions)) grpc.StreamServerInterceptor {
-	o := &GRPCOptions{}
+func StreamServerInterceptor(limiter ratelimit.Limiter, opts ...GRPCOption) grpc.StreamServerInterceptor {
+	o := &grpcOptions{}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -171,19 +175,20 @@ func rateLimitedError(result ratelimit.Result) error {
 	return status.Error(codes.ResourceExhausted, msg)
 }
 
-// GRPCWithKeyFunc is an option setter for GRPCOptions.
-func GRPCWithKeyFunc(fn GRPCKeyFunc) func(*GRPCOptions) {
-	return func(o *GRPCOptions) { o.KeyFunc = fn }
+// GRPCWithKeyFunc returns a GRPCOption that sets the key extraction function.
+func GRPCWithKeyFunc(fn GRPCKeyFunc) GRPCOption {
+	return func(o *grpcOptions) { o.KeyFunc = fn }
 }
 
-// GRPCWithSkipMethods sets methods to skip from rate limiting.
-func GRPCWithSkipMethods(methods ...string) func(*GRPCOptions) {
-	return func(o *GRPCOptions) { o.SkipMethods = methods }
+// GRPCWithSkipMethods adds methods to the list of methods skipped from rate limiting.
+// Multiple calls accumulate; later calls do not overwrite earlier ones.
+func GRPCWithSkipMethods(methods ...string) GRPCOption {
+	return func(o *grpcOptions) { o.SkipMethods = append(o.SkipMethods, methods...) }
 }
 
 // GRPCWithCost sets a function that computes the token cost (weight) of each
 // call. The interceptor then consumes that many tokens via AllowN. Costs below 1
 // are clamped to 1. Default: every call costs 1.
-func GRPCWithCost(fn GRPCCostFunc) func(*GRPCOptions) {
-	return func(o *GRPCOptions) { o.CostFunc = fn }
+func GRPCWithCost(fn GRPCCostFunc) GRPCOption {
+	return func(o *grpcOptions) { o.CostFunc = fn }
 }

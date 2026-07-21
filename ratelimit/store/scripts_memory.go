@@ -17,21 +17,20 @@ import (
 // Register them all with RegisterDefaultScripts, or construct a ready-to-use
 // store with NewMemoryWithScripts.
 
-// RegisterDefaultScripts registers in-memory emulations for every named script
-// the distributed limiters use, keyed by the exact script-body constants passed
-// to Eval. After this call, DistributedTokenBucket, DistributedGCRA,
-// DistributedSlidingWindowLog, DistributedSlidingWindowCounter, and
-// DistributedFixedWindow all work against m without Redis.
+// RegisterDefaultScripts registers in-memory emulations for every built-in
+// ScriptID the distributed limiters use. After this call, DistributedTokenBucket,
+// DistributedGCRA, DistributedSlidingWindowLog, DistributedSlidingWindowCounter,
+// and DistributedFixedWindow all work against m without Redis.
 func RegisterDefaultScripts(m *Memory) {
-	m.RegisterScript(TokenBucketScript, m.tokenBucketHandler)
-	m.RegisterScript(GCRAScript, m.gcraHandler)
-	m.RegisterScript(LeakyBucketScript, m.leakyBucketHandler)
-	m.RegisterScript(SlidingWindowLogScript, m.slidingWindowLogHandler)
-	m.RegisterScript(SlidingWindowCounterScript, m.slidingWindowCounterHandler)
-	m.RegisterScript(FixedWindowScript, m.fixedWindowHandler)
-	m.RegisterScript(CircuitBreakerAcquireScript, m.cbAcquireHandler)
-	m.RegisterScript(CircuitBreakerRecordScript, m.cbRecordHandler)
-	m.RegisterScript(CircuitBreakerReadScript, m.cbReadHandler)
+	m.RegisterScript(TokenBucketScriptID, m.tokenBucketHandler)
+	m.RegisterScript(GCRAScriptID, m.gcraHandler)
+	m.RegisterScript(LeakyBucketScriptID, m.leakyBucketHandler)
+	m.RegisterScript(SlidingWindowLogScriptID, m.slidingWindowLogHandler)
+	m.RegisterScript(SlidingWindowCounterScriptID, m.slidingWindowCounterHandler)
+	m.RegisterScript(FixedWindowScriptID, m.fixedWindowHandler)
+	m.RegisterScript(CircuitBreakerAcquireScriptID, m.cbAcquireHandler)
+	m.RegisterScript(CircuitBreakerRecordScriptID, m.cbRecordHandler)
+	m.RegisterScript(CircuitBreakerReadScriptID, m.cbReadHandler)
 }
 
 // NewMemoryWithScripts creates a Memory store with all default script handlers
@@ -854,7 +853,8 @@ func cbNowNs(args []any) int64 {
 
 // cbAcquireHandler mirrors CircuitBreakerAcquireScript.
 // Args: [open_timeout_ns, half_open_max, ttl_ms, now_ns]
-// Returns: []any{decision int64, state int64}.
+// Returns: []any{decision int64, state int64} normally, or
+// []any{decision int64, state int64, opened_at_ns int64} when decision==1 (reject-open).
 func (m *Memory) cbAcquireHandler(keys []string, args []any) (any, error) {
 	if len(keys) < 1 {
 		return nil, fmt.Errorf("cbAcquireHandler: missing key")
@@ -887,7 +887,7 @@ func (m *Memory) cbAcquireHandler(keys []string, args []any) (any, error) {
 
 	if st.state == 2 {
 		if st.openedAt <= 0 || (now-st.openedAt) < openTimeout {
-			return []any{int64(1), int64(2)}, nil // reject: still open
+			return []any{int64(1), int64(2), st.openedAt}, nil // reject: still open, include opened_at
 		}
 		// OpenTimeout elapsed: promote Open -> HalfOpen.
 		st.state = 1

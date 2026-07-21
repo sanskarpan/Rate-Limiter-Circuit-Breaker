@@ -18,8 +18,7 @@ package composite
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"errors"
 	"sync"
 	"time"
 
@@ -75,19 +74,37 @@ type CompositeLimiter struct {
 	onDecision func(key string, r ratelimit.Result)
 }
 
-// New creates a CompositeLimiter combining the given limiters.
-func New(mode Mode, limiters ...ratelimit.Limiter) *CompositeLimiter {
-	return &CompositeLimiter{
+// New creates a CompositeLimiter combining the given limiters using the
+// specified mode (AND or OR). Pass functional Option values as trailing
+// arguments to configure the clock, recorder, or decision hook at
+// construction time — this is the preferred injection pattern and avoids
+// the race window that the builder methods have when called after the
+// limiter has already been used.
+//
+//	comp := composite.New(composite.AND,
+//	    []ratelimit.Limiter{limA, limB},
+//	    composite.WithClock(clk),
+//	    composite.WithOnDecision(hook),
+//	)
+func New(mode Mode, limiters []ratelimit.Limiter, opts ...Option) *CompositeLimiter {
+	c := &CompositeLimiter{
 		limiters: limiters,
 		mode:     mode,
 		clock:    clock.RealClock{},
 		rec:      metric.Default(),
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // WithClock sets the clock used by WaitN's retry timer and returns the limiter
-// for chaining. Use a ManualClock in tests so WaitN wakes deterministically when
-// the clock is advanced. Not safe to call concurrently with WaitN.
+// for chaining.
+//
+// Deprecated: Pass composite.WithClock(clk) as an Option to New instead.
+// This method is not safe to call concurrently with WaitN; the functional
+// option form avoids that race entirely.
 func (c *CompositeLimiter) WithClock(clk clock.Clock) *CompositeLimiter {
 	c.clock = clk
 	return c
@@ -96,8 +113,11 @@ func (c *CompositeLimiter) WithClock(clk clock.Clock) *CompositeLimiter {
 // WithRecorder wires a metric.Recorder so the composite's own allow/deny
 // decision and decision latency are emitted under composite_and/composite_or.
 // Defaults to metric.Default() (a no-op) when unset. Returns the limiter for
-// chaining. A nil recorder is ignored. Not safe to call concurrently with
-// AllowN.
+// chaining. A nil recorder is ignored.
+//
+// Deprecated: Pass composite.WithRecorder(rec) as an Option to New instead.
+// This method is not safe to call concurrently with AllowN; the functional
+// option form avoids that race entirely.
 func (c *CompositeLimiter) WithRecorder(rec metric.Recorder) *CompositeLimiter {
 	if rec != nil {
 		c.rec = rec
@@ -110,7 +130,11 @@ func (c *CompositeLimiter) WithRecorder(rec metric.Recorder) *CompositeLimiter {
 // default is nil (a cheap no-op guarded by a nil check on the hot path).
 // Returns the limiter for chaining. The hook runs synchronously on the calling
 // goroutine before the decision is returned, so keep it fast and non-blocking.
-// A nil hook is ignored. Not safe to call concurrently with AllowN.
+// A nil hook is ignored.
+//
+// Deprecated: Pass composite.WithOnDecision(fn) as an Option to New instead.
+// This method is not safe to call concurrently with AllowN; the functional
+// option form avoids that race entirely.
 func (c *CompositeLimiter) WithOnDecision(fn func(key string, r ratelimit.Result)) *CompositeLimiter {
 	if fn != nil {
 		c.onDecision = fn
@@ -324,30 +348,24 @@ func (c *CompositeLimiter) Peek(ctx context.Context, key string) ratelimit.State
 
 // Reset resets all state for the given key across all limiters.
 func (c *CompositeLimiter) Reset(ctx context.Context, key string) error {
-	var errs []string
+	var errs []error
 	for _, l := range c.limiters {
 		if err := l.Reset(ctx, key); err != nil {
-			errs = append(errs, err.Error())
+			errs = append(errs, err)
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("composite reset errors: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Close closes all underlying limiters.
 func (c *CompositeLimiter) Close() error {
-	var errs []string
+	var errs []error
 	for _, l := range c.limiters {
 		if err := l.Close(); err != nil {
-			errs = append(errs, err.Error())
+			errs = append(errs, err)
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("composite close errors: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // algorithm returns the algorithm name based on mode.

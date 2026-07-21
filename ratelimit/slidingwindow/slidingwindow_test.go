@@ -115,7 +115,7 @@ func TestSlidingWindowLog_Reset(t *testing.T) {
 
 func TestSlidingWindowCounter_BasicAllow(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -134,7 +134,7 @@ func TestSlidingWindowCounter_ApproximationFormula(t *testing.T) {
 	// At 50% through window, with previous=8 and current=3:
 	// effective = 8*(1-0.5) + 3 = 4 + 3 = 7 → 3 remaining
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -159,7 +159,7 @@ func TestSlidingWindowCounter_ApproximationFormula(t *testing.T) {
 
 func TestSlidingWindowCounter_WindowShift(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -383,7 +383,7 @@ func TestSlidingWindowLog_Wait_Success(t *testing.T) {
 
 func TestSlidingWindowCounter_Peek(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -398,7 +398,7 @@ func TestSlidingWindowCounter_Peek(t *testing.T) {
 
 func TestSlidingWindowCounter_Peek_DoesNotConsume(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -411,7 +411,7 @@ func TestSlidingWindowCounter_Peek_DoesNotConsume(t *testing.T) {
 
 func TestSlidingWindowCounter_AllowN(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -423,7 +423,7 @@ func TestSlidingWindowCounter_AllowN(t *testing.T) {
 
 func TestSlidingWindowCounter_AllowN_ExceedsLimit(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -435,7 +435,7 @@ func TestSlidingWindowCounter_AllowN_ExceedsLimit(t *testing.T) {
 
 func TestSlidingWindowCounter_MultipleKeys_Isolation(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -450,7 +450,7 @@ func TestSlidingWindowCounter_MultipleKeys_Isolation(t *testing.T) {
 
 func TestSlidingWindowCounter_Reset(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -466,7 +466,7 @@ func TestSlidingWindowCounter_Reset(t *testing.T) {
 
 func TestSlidingWindowCounter_InvalidKey(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -478,7 +478,7 @@ func TestSlidingWindowCounter_InvalidKey(t *testing.T) {
 
 func TestSlidingWindowCounter_InvalidN(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -512,7 +512,7 @@ func TestSlidingWindowCounter_Close_Idempotent(t *testing.T) {
 
 func TestSlidingWindowCounter_Wait_Success(t *testing.T) {
 	clk := clock.NewManualClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(1, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 
 	err := swc.Wait(context.Background(), "key")
@@ -530,7 +530,7 @@ func TestSlidingWindowCounter_Wait_Success(t *testing.T) {
 func TestSlidingWindowCounter_PreviousWeighting_AcrossBoundary(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	clk := clock.NewManualClock(start)
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -571,7 +571,7 @@ func TestSlidingWindowCounter_PreviousWeighting_AcrossBoundary(t *testing.T) {
 func TestSlidingWindowCounter_MultiWindowGap_ResetsPrevious(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	clk := clock.NewManualClock(start)
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -608,7 +608,7 @@ func TestSlidingWindowCounter_MultiWindowGap_ResetsPrevious(t *testing.T) {
 func TestSlidingWindowCounter_ExactlyOneWindowBack_CarriesPrevious(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	clk := clock.NewManualClock(start)
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -698,7 +698,7 @@ func TestSlidingWindowLog_PartialAdvance_EvictsAndRetry(t *testing.T) {
 func TestSlidingWindowCounter_RetryAfter_CurrentAloneExceedsLimit(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	clk := clock.NewManualClock(start)
-	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(10, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 
@@ -738,7 +738,7 @@ func TestSlidingWindowCounter_RetryAfter_CurrentAloneExceedsLimit(t *testing.T) 
 func TestSlidingWindowCounter_RetryAfter_NeverExceedsWindow(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	clk := clock.NewManualClock(start)
-	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithCounterClock(clk))
+	swc := slidingwindow.NewCounter(5, time.Second, slidingwindow.WithClock(clk))
 	defer swc.Close()
 	ctx := context.Background()
 

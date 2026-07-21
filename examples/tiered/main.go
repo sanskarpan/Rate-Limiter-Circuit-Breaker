@@ -22,19 +22,21 @@ import (
 func main() {
 	// Most specific first. Small numbers keep the demo output readable.
 	limiter := tiered.New(
-		tiered.Tier{ // per-user: 3 req burst, keyed by the full "org:user" string
-			Name:    "per-user",
-			Limiter: tokenbucket.New(3, 3),
-		},
-		tiered.Tier{ // per-org: 5 req burst, keyed by the "org" prefix
-			Name:    "per-org",
-			KeyFunc: tiered.Prefix(":"),
-			Limiter: tokenbucket.New(5, 5),
-		},
-		tiered.Tier{ // global: 8 req burst across everyone
-			Name:    "global",
-			KeyFunc: tiered.Constant("global"),
-			Limiter: tokenbucket.New(8, 8),
+		[]tiered.Tier{
+			{ // per-user: 3 req burst, keyed by the full "org:user" string
+				Name:    "per-user",
+				Limiter: tokenbucket.New(3, 3),
+			},
+			{ // per-org: 5 req burst, keyed by the "org" prefix
+				Name:    "per-org",
+				KeyFunc: tiered.Prefix(":"),
+				Limiter: tokenbucket.New(5, 5),
+			},
+			{ // global: 8 req burst across everyone
+				Name:    "global",
+				KeyFunc: tiered.Constant("global"),
+				Limiter: tokenbucket.New(8, 8),
+			},
 		},
 	)
 	defer limiter.Close()

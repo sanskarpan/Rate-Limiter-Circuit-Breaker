@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
@@ -27,7 +28,7 @@ func TestComposite_AND_NoTokenLeak_UnderConcurrency(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -70,7 +71,7 @@ func TestComposite_AND_Deny_RetryAfterPositive(t *testing.T) {
 	defer limA.Close()
 	defer limB.Close()
 
-	comp := composite.New(composite.AND, limA, limB)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{limA, limB})
 	defer comp.Close()
 	ctx := context.Background()
 

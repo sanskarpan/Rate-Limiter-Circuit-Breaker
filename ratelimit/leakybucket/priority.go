@@ -30,6 +30,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 )
 
+// Compile-time assertion: LeakyBucket must satisfy the PriorityLimiter interface.
+var _ ratelimit.PriorityLimiter = (*LeakyBucket)(nil)
+
 // pqToken is a single priority waiter parked in a key's priority heap.
 type pqToken struct {
 	result   chan ratelimit.Result

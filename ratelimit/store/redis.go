@@ -309,8 +309,75 @@ func (r *Redis) IncrBy(ctx context.Context, key string, delta int64, ttl time.Du
 	return v, nil
 }
 
-// Eval executes a Lua script atomically on Redis.
-// The script parameter is the Lua script body, not a registered name.
+
+// ---------------------------------------------------------------------------
+// ScriptID constants — typed identifiers for every Eval script
+// ---------------------------------------------------------------------------
+//
+// Use these constants as the scriptID argument to Store.Eval. Do not construct
+// ScriptID values directly.
+//
+// External store implementations (DynamoDB, Memcached, etc.) should switch on
+// these constants' String() names or keep the exported Lua body constants
+// (TokenBucketScript etc.) for their internal dispatch tables.
+
+var (
+	// TokenBucketScriptID identifies the token-bucket rate-limit script.
+	// Returns: []any{allowed int64, remaining int64, refilled int64}
+	TokenBucketScriptID = ScriptID{"token_bucket"}
+
+	// FixedWindowScriptID identifies the fixed-window rate-limit script.
+	// Returns: []any{allowed int64, count int64}
+	FixedWindowScriptID = ScriptID{"fixed_window"}
+
+	// GCRAScriptID identifies the GCRA rate-limit script.
+	// Returns: []any{allowed int64, retry_after_ns int64}
+	GCRAScriptID = ScriptID{"gcra"}
+
+	// LeakyBucketScriptID identifies the leaky-bucket rate-limit script.
+	// Returns: []any{allowed int64, queue_depth int64, retry_after_ns int64}
+	LeakyBucketScriptID = ScriptID{"leaky_bucket"}
+
+	// SlidingWindowLogScriptID identifies the sliding-window-log script.
+	// Returns: []any{allowed int64, count int64, retry_after_ns int64}
+	SlidingWindowLogScriptID = ScriptID{"sliding_window_log"}
+
+	// SlidingWindowCounterScriptID identifies the sliding-window-counter script.
+	// Returns: []any{allowed int64, new_current int64, estimated_scaled int64}
+	SlidingWindowCounterScriptID = ScriptID{"sliding_window_counter"}
+
+	// CircuitBreakerAcquireScriptID identifies the circuit-breaker acquire script.
+	// Returns: []any{decision int64, state int64} or
+	//          []any{decision int64, state int64, opened_at_ns int64} when decision==1.
+	CircuitBreakerAcquireScriptID = ScriptID{"cb_acquire"}
+
+	// CircuitBreakerRecordScriptID identifies the circuit-breaker record script.
+	// Returns: []any{state int64}
+	CircuitBreakerRecordScriptID = ScriptID{"cb_record"}
+
+	// CircuitBreakerReadScriptID identifies the circuit-breaker read script.
+	// Returns: []any{state int64, failures int64, successes int64, opened_at_ns int64, half_open_inflight int64}
+	CircuitBreakerReadScriptID = ScriptID{"cb_read"}
+)
+
+// scriptBodies maps each ScriptID.name to its Lua body string. Redis.Eval
+// looks up the body here; callers pass ScriptIDs and never see raw Lua.
+var scriptBodies = map[string]string{
+	TokenBucketScriptID.name:          TokenBucketScript,
+	FixedWindowScriptID.name:          FixedWindowScript,
+	GCRAScriptID.name:                 GCRAScript,
+	LeakyBucketScriptID.name:          LeakyBucketScript,
+	SlidingWindowLogScriptID.name:     SlidingWindowLogScript,
+	SlidingWindowCounterScriptID.name: SlidingWindowCounterScript,
+	CircuitBreakerAcquireScriptID.name: CircuitBreakerAcquireScript,
+	CircuitBreakerRecordScriptID.name:  CircuitBreakerRecordScript,
+	CircuitBreakerReadScriptID.name:    CircuitBreakerReadScript,
+}
+// Eval executes the Lua script identified by scriptID atomically on Redis.
+//
+// scriptID must be one of the package-level ScriptID constants; the ScriptID is
+// mapped to its Lua body string internally. Passing an unknown ScriptID returns
+// an error immediately without touching Redis.
 //
 // Allocation / escape-analysis notes (§3.3):
 //
@@ -333,14 +400,18 @@ func (r *Redis) IncrBy(ctx context.Context, key string, delta int64, ttl time.Du
 // state strings, both of which escape by contract (they are the returned reply
 // / the persisted per-key state) and so are likewise not poolable. The local
 // (non-distributed) Allow paths were already 0-alloc and remain so.
-func (r *Redis) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
+func (r *Redis) Eval(ctx context.Context, scriptID ScriptID, keys []string, args ...any) (any, error) {
+	body, ok := scriptBodies[scriptID.name]
+	if !ok {
+		return nil, fmt.Errorf("redis eval: unknown scriptID %q", scriptID.name)
+	}
 	// Prefix keys. This slice escapes into go-redis (see the note above), so it
 	// is intentionally allocated per call rather than pooled.
 	prefixedKeys := make([]string, len(keys))
 	for i, k := range keys {
 		prefixedKeys[i] = r.prefixed(k)
 	}
-	val, err := r.client.Eval(ctx, script, prefixedKeys, args...).Result()
+	val, err := r.client.Eval(ctx, body, prefixedKeys, args...).Result()
 	if err == nil {
 		return val, nil
 	}
@@ -348,7 +419,7 @@ func (r *Redis) Eval(ctx context.Context, script string, keys []string, args ...
 		return nil, nil
 	}
 	if isConnectionError(err) {
-		return r.fallback.Eval(ctx, script, keys, args...)
+		return r.fallback.Eval(ctx, scriptID, keys, args...)
 	}
 	return nil, fmt.Errorf("redis eval: %w", err)
 }
@@ -467,13 +538,13 @@ func (r *Redis) CheckServerTimeSkew(ctx context.Context, threshold time.Duration
 // in the 2^60–2^61 range (1.15e18–2.3e18) the ULP is exactly 256, so a
 // nanosecond TAT/score SNAPS to the nearest multiple of 256ns.
 //
-// GUARANTEE (tested — see PrecisionBoundNs and TestPrecisionBound_* in
+// GUARANTEE (tested — see precisionBoundNs and TestPrecisionBound_* in
 // scripts_precision_test.go):
 //
 //   - The absolute error introduced by float64 snapping on any single stored
 //     timestamp is at most one ULP, i.e. STRICTLY LESS THAN 256ns for every
 //     wall-clock time this millennium (the ULP stays 256 until nanosecond
-//     timestamps reach 2^61 ≈ 2.3e18 ns, i.e. the year 2043; PrecisionBoundNs
+//     timestamps reach 2^61 ≈ 2.3e18 ns, i.e. the year 2043; precisionBoundNs
 //     documents and the test pins the exact ULP for the current epoch). We
 //     quote it as the conservative "≤256ns" bound.
 //
@@ -507,10 +578,10 @@ func (r *Redis) CheckServerTimeSkew(ctx context.Context, threshold time.Duration
 
 // float64ExactIntLimit is 2^53, the largest integer such that every integer in
 // [-2^53, 2^53] is exactly representable as an IEEE-754 double. Above it, doubles
-// can represent only every ULP-th integer (see PrecisionBoundNs).
+// can represent only every ULP-th integer (see precisionBoundNs).
 const float64ExactIntLimit = 1 << 53 // 9_007_199_254_740_992
 
-// PrecisionBoundNs returns the worst-case absolute error (in nanoseconds)
+// precisionBoundNs returns the worst-case absolute error (in nanoseconds)
 // introduced when the nanosecond timestamp nowNs is round-tripped through a
 // Redis Lua double, i.e. the ULP (unit in the last place) of nowNs as a float64.
 //
@@ -523,8 +594,8 @@ const float64ExactIntLimit = 1 << 53 // 9_007_199_254_740_992
 //
 // It is defined as the gap between nowNs (rounded to the nearest representable
 // double) and the next representable double, computed exactly via the float64
-// exponent, so callers and tests can assert the guarantee without a live Redis.
-func PrecisionBoundNs(nowNs int64) int64 {
+// exponent, so internal tests can assert the guarantee without a live Redis.
+func precisionBoundNs(nowNs int64) int64 {
 	if nowNs < 0 {
 		nowNs = -nowNs
 	}
@@ -851,15 +922,17 @@ return {1, new_current, estimated_scaled}
 //
 // Keys: [state_key]
 // Args: [open_timeout_ns, half_open_max, ttl_ms]
-// Returns: [decision, state]
+// Returns: [decision, state] or [decision, state, opened_at_ns] when decision==1
 //
 //	decision: 0 = allow (closed, or half-open with a reserved probe slot)
-//	          1 = reject, circuit open
+//	          1 = reject, circuit open  (third element opened_at_ns included)
 //	          2 = reject, half-open probe limit reached
 //	state:    the breaker state AFTER any lazy Open→HalfOpen promotion (0/1/2)
 //
 // When decision==0 in half-open, this call has reserved a probe slot
 // (half_open_inflight was incremented) that the matching Record call releases.
+// When decision==1, opened_at_ns is the nanosecond server-clock timestamp when
+// the circuit last opened; callers may use it to compute TimeUntilHalfOpen.
 const CircuitBreakerAcquireScript = `
 local key = KEYS[1]
 local open_timeout = tonumber(ARGV[1])
@@ -881,7 +954,7 @@ if state == 2 then
         inflight = 0
         redis.call("HSET", key, "state", 1, "successes", 0, "half_open_inflight", 0)
     else
-        return {1, 2}
+        return {1, 2, opened_at}
     end
 end
 

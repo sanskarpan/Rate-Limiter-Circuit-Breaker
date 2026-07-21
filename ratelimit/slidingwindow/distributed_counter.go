@@ -8,6 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+// distributedCounterAlgorithmName is the algorithm label emitted in Result fields.
+const distributedCounterAlgorithmName = "distributed_sliding_window_counter"
+
 
 // DistributedSlidingWindowCounter approximates a sliding window using two fixed-window
 // counters. The formula is:
@@ -71,10 +74,10 @@ func (d *DistributedSlidingWindowCounter) Allow(ctx context.Context, key string)
 func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string, n int) ratelimit.Result {
 	// Validate inputs to match the local SlidingWindowCounter.
 	if err := ratelimit.ValidateKey(key); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_sliding_window_counter"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedCounterAlgorithmName}
 	}
 	if err := ratelimit.ValidateN(n); err != nil {
-		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: "distributed_sliding_window_counter"}
+		return ratelimit.Result{Allowed: false, Limit: d.limit, Algorithm: distributedCounterAlgorithmName}
 	}
 
 	now := time.Now()
@@ -106,7 +109,7 @@ func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string
 	nextWindowAt := time.Unix(0, currentWindowStart+int64(d.window))
 	retryAfter := nextWindowAt.Sub(now)
 
-	result, err := d.store.Eval(ctx, store.SlidingWindowCounterScript,
+	result, err := d.store.Eval(ctx, store.SlidingWindowCounterScriptID,
 		[]string{currentKey, prevKey},
 		d.limit, n, fracMillionths, currentTTLms,
 	)
@@ -114,7 +117,7 @@ func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_sliding_window_counter",
+			Algorithm: distributedCounterAlgorithmName,
 		}
 	}
 
@@ -123,7 +126,7 @@ func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string
 		return ratelimit.Result{
 			Allowed:   false,
 			Limit:     d.limit,
-			Algorithm: "distributed_sliding_window_counter",
+			Algorithm: distributedCounterAlgorithmName,
 		}
 	}
 	allowed, _ := arr[0].(int64)
@@ -135,7 +138,7 @@ func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string
 			Limit:      d.limit,
 			Remaining:  0,
 			RetryAfter: retryAfter,
-			Algorithm:  "distributed_sliding_window_counter",
+			Algorithm:  distributedCounterAlgorithmName,
 		}
 	}
 
@@ -149,7 +152,7 @@ func (d *DistributedSlidingWindowCounter) AllowN(ctx context.Context, key string
 		Limit:      d.limit,
 		Remaining:  remaining,
 		ResetAfter: retryAfter,
-		Algorithm:  "distributed_sliding_window_counter",
+		Algorithm:  distributedCounterAlgorithmName,
 	}
 }
 
@@ -186,7 +189,7 @@ func (d *DistributedSlidingWindowCounter) WaitN(ctx context.Context, key string,
 func (d *DistributedSlidingWindowCounter) Peek(ctx context.Context, key string) ratelimit.State {
 	return ratelimit.State{
 		Key:       key,
-		Algorithm: "distributed_sliding_window_counter",
+		Algorithm: distributedCounterAlgorithmName,
 		Limit:     d.limit,
 	}
 }

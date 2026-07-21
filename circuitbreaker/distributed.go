@@ -117,7 +117,7 @@ func (d *DistributedCircuitBreaker) nowNs() int64 {
 //   - FAIL-OPEN: if the store errors on the acquire step, fn is executed anyway
 //     (no protection) rather than blocking traffic.
 func (d *DistributedCircuitBreaker) Execute(ctx context.Context, fn func(context.Context) error) error {
-	decision, state, acquiredProbe, storeErr := d.acquire(ctx)
+	decision, state, acquiredProbe, openedAtNs, storeErr := d.acquire(ctx)
 	if storeErr != nil {
 		// Fail-open: the store is unavailable, so we cannot consult shared state.
 		// Run fn rather than wedge traffic. We still attempt to record the
@@ -131,10 +131,18 @@ func (d *DistributedCircuitBreaker) Execute(ctx context.Context, fn func(context
 	switch decision {
 	case decisionRejectOpen:
 		d.onRejected()
-		return &CircuitError{Name: d.name, State: State(state), Err: ErrCircuitOpen}
+		var timeUntilHalfOpen time.Duration
+		if openedAtNs > 0 {
+			halfOpenAt := time.Unix(0, openedAtNs).Add(d.cfg.OpenTimeout)
+			timeUntilHalfOpen = halfOpenAt.Sub(d.cfg.Clock.Now())
+			if timeUntilHalfOpen < 0 {
+				timeUntilHalfOpen = 0
+			}
+		}
+		return newCircuitError(d.name, State(state), timeUntilHalfOpen, ErrCircuitOpen)
 	case decisionRejectProbe:
 		d.onRejected()
-		return &CircuitError{Name: d.name, State: State(state), Err: ErrTooManyRequests}
+		return newCircuitError(d.name, State(state), 0, ErrTooManyRequests)
 	}
 
 	// Allowed. Run fn, then record the outcome + transition atomically.
@@ -211,8 +219,8 @@ const (
 // acquire runs the atomic read-decide script. acquiredProbe reports whether a
 // half-open probe slot was reserved (which record must release). A non-nil
 // storeErr signals the caller to fail open.
-func (d *DistributedCircuitBreaker) acquire(ctx context.Context) (decision, state int, acquiredProbe bool, storeErr error) {
-	res, err := d.store.Eval(ctx, store.CircuitBreakerAcquireScript,
+func (d *DistributedCircuitBreaker) acquire(ctx context.Context) (decision, state int, acquiredProbe bool, openedAtNs int64, storeErr error) {
+	res, err := d.store.Eval(ctx, store.CircuitBreakerAcquireScriptID,
 		[]string{d.key},
 		int64(d.cfg.OpenTimeout), // open_timeout_ns
 		int64(d.cfg.HalfOpenMaxRequests),
@@ -220,15 +228,15 @@ func (d *DistributedCircuitBreaker) acquire(ctx context.Context) (decision, stat
 		d.nowNs(), // trailing now_ns for the in-memory emulation (Redis ignores it)
 	)
 	if err != nil {
-		return 0, 0, false, err
+		return 0, 0, false, 0, err
 	}
-	dec, st, ok := parseDecision(res)
+	dec, st, oAt, ok := parseDecision(res)
 	if !ok {
 		// Malformed reply: fail open like a store error rather than guess.
-		return 0, 0, false, fmt.Errorf("circuitbreaker: malformed acquire reply %T", res)
+		return 0, 0, false, 0, fmt.Errorf("circuitbreaker: malformed acquire reply %T", res)
 	}
 	acquiredProbe = dec == decisionAllow && st == int(StateHalfOpen)
-	return dec, st, acquiredProbe, nil
+	return dec, st, acquiredProbe, oAt, nil
 }
 
 // recordOutcome runs the atomic record-transition script. Store errors are
@@ -244,7 +252,7 @@ func (d *DistributedCircuitBreaker) recordOutcome(ctx context.Context, isFailure
 		probe = 1
 	}
 	prev := d.stateBestEffort(ctx)
-	res, err := d.store.Eval(ctx, store.CircuitBreakerRecordScript,
+	res, err := d.store.Eval(ctx, store.CircuitBreakerRecordScriptID,
 		[]string{d.key},
 		outcome,
 		int64(d.cfg.FailureThreshold),
@@ -345,7 +353,7 @@ func (d *DistributedCircuitBreaker) Snapshot(ctx context.Context) Snapshot {
 // read runs the read-only state script. Returns (state, failures, successes,
 // openedAtNs, err).
 func (d *DistributedCircuitBreaker) read(ctx context.Context) (state, failures, successes int, openedAtNs int64, err error) {
-	res, evalErr := d.store.Eval(ctx, store.CircuitBreakerReadScript,
+	res, evalErr := d.store.Eval(ctx, store.CircuitBreakerReadScriptID,
 		[]string{d.key},
 		int64(d.cfg.OpenTimeout),
 		d.nowNs(),
@@ -373,12 +381,16 @@ func (d *DistributedCircuitBreaker) String() string {
 // reply parsing helpers (tolerant of int64/[]any shapes from Redis & memory)
 // ---------------------------------------------------------------------------
 
-func parseDecision(res any) (decision, state int, ok bool) {
+func parseDecision(res any) (decision, state int, openedAtNs int64, ok bool) {
 	arr, isArr := res.([]any)
 	if !isArr || len(arr) < 2 {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
-	return int(asInt64(arr[0])), int(asInt64(arr[1])), true
+	var oAt int64
+	if len(arr) >= 3 {
+		oAt = asInt64(arr[2])
+	}
+	return int(asInt64(arr[0])), int(asInt64(arr[1])), oAt, true
 }
 
 func parseSingleState(res any) (int, bool) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/fixedwindow"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
@@ -16,7 +17,7 @@ func Example_andMode() {
 	burstLimiter := tokenbucket.New(10, 10) // 10 req/s burst
 	minuteLimiter := fixedwindow.New(100, time.Minute)
 
-	comp := composite.New(composite.AND, burstLimiter, minuteLimiter)
+	comp := composite.New(composite.AND, []ratelimit.Limiter{burstLimiter, minuteLimiter})
 	defer comp.Close()
 
 	ctx := context.Background()
@@ -33,7 +34,7 @@ func Example_orMode() {
 	premiumLimiter := tokenbucket.New(1000, 100) // premium: 1000 burst, 100/s
 	basicLimiter := tokenbucket.New(10, 1)       // basic: 10 burst, 1/s
 
-	comp := composite.New(composite.OR, premiumLimiter, basicLimiter)
+	comp := composite.New(composite.OR, []ratelimit.Limiter{premiumLimiter, basicLimiter})
 	defer comp.Close()
 
 	ctx := context.Background()

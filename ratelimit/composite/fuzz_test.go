@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/composite"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/tokenbucket"
 )
@@ -47,7 +48,7 @@ func FuzzComposite(f *testing.F) {
 		if useOR {
 			mode = composite.OR
 		}
-		c := composite.New(mode, tb1, tb2).WithClock(clk)
+		c := composite.New(mode, []ratelimit.Limiter{tb1, tb2}, composite.WithClock(clk))
 		defer c.Close() //nolint:errcheck
 
 		ctx := context.Background()

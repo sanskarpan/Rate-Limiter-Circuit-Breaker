@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/clock"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/metric"
 )
 
@@ -36,10 +37,10 @@ type Bulkhead struct {
 	// giving up. It is allocation-light and thread-safe.
 	waitStats waitAccumulator
 
-	// now supplies the current time; it is time.Now by default and may be
-	// overridden in tests via WithClock to make wait-time assertions
+	// now supplies the current time; it is clock.RealClock{} by default and may
+	// be overridden in tests via WithClock to make wait-time assertions
 	// deterministic.
-	now func() time.Time
+	now clock.Clock
 
 	name string
 	rec  metric.Recorder
@@ -169,12 +170,12 @@ func WithRecorder(rec metric.Recorder) Option {
 
 // WithClock overrides the time source used to measure caller wait times.
 // It is primarily intended for tests that need deterministic wait durations;
-// production code should leave it unset (defaulting to time.Now). A nil clock
-// is ignored.
-func WithClock(now func() time.Time) Option {
+// production code should leave it unset (defaulting to clock.RealClock{}). A
+// nil clock is ignored.
+func WithClock(clk clock.Clock) Option {
 	return func(b *Bulkhead) {
-		if now != nil {
-			b.now = now
+		if clk != nil {
+			b.now = clk
 		}
 	}
 }
@@ -194,7 +195,7 @@ func New(maxConcurrency int, maxWait time.Duration, opts ...Option) *Bulkhead {
 	b := &Bulkhead{
 		sem:     make(chan struct{}, maxConcurrency),
 		maxWait: maxWait,
-		now:     time.Now,
+		now:     clock.RealClock{},
 		name:    "default",
 		rec:     metric.Default(),
 	}
@@ -228,22 +229,22 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func(context.Context) error) 
 		// Enter the wait: bump queue depth and start the wait-time clock.
 		// The counter is decremented and the wait time recorded on every
 		// exit path (acquire, cancel, timeout) below.
-		start := b.now()
+		start := b.now.Now()
 		b.waiting.Add(1)
 
 		select {
 		case b.sem <- struct{}{}:
 			// Slot acquired.
 			b.waiting.Add(-1)
-			b.waitStats.observe(b.now().Sub(start))
+			b.waitStats.observe(b.now.Now().Sub(start))
 		case <-ctx.Done():
 			b.waiting.Add(-1)
-			b.waitStats.observe(b.now().Sub(start))
+			b.waitStats.observe(b.now.Now().Sub(start))
 			b.reject()
 			return ctx.Err()
 		case <-timer.C:
 			b.waiting.Add(-1)
-			b.waitStats.observe(b.now().Sub(start))
+			b.waitStats.observe(b.now.Now().Sub(start))
 			b.reject()
 			return b.full()
 		}
@@ -283,26 +284,19 @@ func (b *Bulkhead) full() error {
 func (b *Bulkhead) Name() string { return b.name }
 
 // Inflight returns the number of executions currently in progress.
-func (b *Bulkhead) Inflight() int64 {
-	return b.inflight.Load()
+func (b *Bulkhead) Inflight() int {
+	return int(b.inflight.Load())
 }
 
 // Rejected returns the total number of requests that were rejected because no
 // slot was available within the configured maxWait duration.
-func (b *Bulkhead) Rejected() int64 {
-	return b.rejected.Load()
+func (b *Bulkhead) Rejected() int {
+	return int(b.rejected.Load())
 }
 
-// Waiting returns the number of callers currently blocked waiting for a slot
-// (the "U" — utilization/saturation — signal in USE). It is always 0 when
-// maxWait is 0 because such calls never enter the wait.
-func (b *Bulkhead) Waiting() int {
-	return int(b.waiting.Load())
-}
-
-// QueueDepth returns the current queue depth: the number of callers waiting for
-// a slot. When maxWait is 0 there is no queue, so it is always 0. It is an
-// alias for Waiting expressed in queueing terms.
+// QueueDepth returns the number of callers currently blocked waiting for a slot
+// (the "U" — utilization/saturation — signal in USE). When maxWait is 0 there
+// is no queue, so it is always 0.
 //
 // NOTE: this saturation signal is intentionally exposed only via accessors
 // rather than metric.Recorder, which today carries only SetBulkheadInflight /

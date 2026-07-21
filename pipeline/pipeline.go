@@ -276,6 +276,8 @@ func chain(stages []stage, i int, ctx context.Context, fn func(context.Context) 
 
 // RateLimitError is returned when the rate limiter denies a request.
 type RateLimitError struct {
+	// RetryAfter is the suggested wait before retrying. Zero means the rate
+	// limiter did not provide a hint.
 	RetryAfter time.Duration
 }
 
@@ -297,7 +299,6 @@ var ErrConcurrencyLimited = errors.New("pipeline: concurrency limited")
 // under overload (its priority was below the current dynamic drop threshold).
 var ErrLoadShed = errors.New("pipeline: load shed")
 
-// Is implements errors.Is for RateLimitError.
-func (e *RateLimitError) Is(target error) bool {
-	return target == ErrRateLimited
-}
+// Unwrap returns ErrRateLimited so errors.Is(err, ErrRateLimited) matches a *RateLimitError,
+// following the same pattern as BulkheadError and TimeoutError in this package.
+func (e *RateLimitError) Unwrap() error { return ErrRateLimited }

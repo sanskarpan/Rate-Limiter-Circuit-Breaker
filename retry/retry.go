@@ -14,6 +14,7 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/internal/clock"
@@ -163,8 +164,10 @@ func (p *Policy) delay(attempt int) time.Duration {
 // Do executes fn according to the policy.
 //
 // fn is called up to MaxAttempts times. If fn succeeds (returns nil), Do
-// returns nil immediately. If all attempts fail, Do returns the last error
-// returned by fn (which may be wrapped with context from the retry policy).
+// returns nil immediately. If all attempts fail, Do returns
+// ErrMaxAttemptsExceeded wrapping the last fn error, so that both
+// errors.Is(err, ErrMaxAttemptsExceeded) and errors.As/errors.Is targeting
+// the underlying error remain true.
 //
 // If ctx is cancelled while waiting between retries, Do returns ctx.Err()
 // immediately without attempting another call.
@@ -223,7 +226,7 @@ func (p *Policy) Do(ctx context.Context, fn func(context.Context) error) error {
 		}
 	}
 
-	return lastErr
+	return fmt.Errorf("%w: %w", ErrMaxAttemptsExceeded, lastErr)
 }
 
 // DoWithResult executes fn and returns the typed result along with any error.

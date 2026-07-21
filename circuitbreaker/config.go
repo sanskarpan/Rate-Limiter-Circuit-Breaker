@@ -100,7 +100,11 @@ type Config struct {
 	// OnRejected is called when a request is rejected (circuit open or half-open limit).
 	OnRejected func(name string)
 
-	// Clock is the time source (override for testing).
+	// Clock is the time source used for timing open-state transitions and
+	// request latency. The default (nil) uses clock.RealClock{}. Override
+	// in tests with a ManualClock from the internal/clock package or any
+	// value that satisfies the clock.Clock interface, which is importable
+	// at "github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/clock".
 	Clock clock.Clock
 
 	// Recorder receives observability events (state gauge, result counters,

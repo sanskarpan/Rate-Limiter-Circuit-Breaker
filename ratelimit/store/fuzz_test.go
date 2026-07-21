@@ -81,7 +81,7 @@ func FuzzScriptsMemory(f *testing.F) {
 
 		// --- Token bucket: [capacity(float), refillRate(float), n, now, ttlMs] ---
 		{
-			out, err := m.Eval(ctx, store.TokenBucketScript, []string{key + ":tb"},
+			out, err := m.Eval(ctx, store.TokenBucketScriptID, []string{key + ":tb"},
 				float64(a), float64(b), float64(n), float64(now), ttlMs)
 			if err == nil {
 				r := asInts(t, "tokenBucket", out)
@@ -99,7 +99,7 @@ func FuzzScriptsMemory(f *testing.F) {
 
 		// --- GCRA: [emission_ns, burst, n, now_ns, ttlMs] ---
 		{
-			out, err := m.Eval(ctx, store.GCRAScript, []string{key + ":gcra"},
+			out, err := m.Eval(ctx, store.GCRAScriptID, []string{key + ":gcra"},
 				a, b, n, now, ttlMs)
 			if err == nil {
 				r := asInts(t, "gcra", out)
@@ -120,7 +120,7 @@ func FuzzScriptsMemory(f *testing.F) {
 
 		// --- Leaky bucket: [emission_ns, capacity, n, now_ns, ttlMs] ---
 		{
-			out, err := m.Eval(ctx, store.LeakyBucketScript, []string{key + ":lb"},
+			out, err := m.Eval(ctx, store.LeakyBucketScriptID, []string{key + ":lb"},
 				a, b, n, now, ttlMs)
 			if err == nil {
 				r := asInts(t, "leakyBucket", out)
