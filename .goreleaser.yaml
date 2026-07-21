@@ -153,10 +153,8 @@ brews:
     repository:
       owner: sanskarpan
       name: homebrew-tap
-      token: "unused"
-    # skip_upload: set to false once sanskarpan/homebrew-tap exists and
-    # HOMEBREW_TAP_GITHUB_TOKEN secret is configured in this repo.
-    skip_upload: true
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    skip_upload: false
     directory: Formula
     homepage: "https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
     description: "Demo server for the Resilience Go rate-limiting & circuit-breaking toolkit."
