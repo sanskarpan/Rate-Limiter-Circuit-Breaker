@@ -28,8 +28,8 @@ func TestParity_LeakyBucket_RedisVsEmulation(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		now := base + int64(i)*(emission/3)
 		args := []any{emission, capacity, int64(1), now, int64(10000)}
-		rres, rerr := r.Eval(ctx, store.LeakyBucketScript, []string{"lbk"}, args...)
-		mres, merr := m.Eval(ctx, store.LeakyBucketScript, []string{"lbk"}, args...)
+		rres, rerr := r.Eval(ctx, store.LeakyBucketScriptID, []string{"lbk"}, args...)
+		mres, merr := m.Eval(ctx, store.LeakyBucketScriptID, []string{"lbk"}, args...)
 		if ra, ma := allowedOf(rres, rerr), allowedOf(mres, merr); ra != ma {
 			t.Fatalf("leaky-bucket parity mismatch at i=%d now=%d: redis allowed=%d, emulation allowed=%d", i, now, ra, ma)
 		}

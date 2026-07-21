@@ -225,7 +225,7 @@ func TestRedis_Eval_GCRAScript(t *testing.T) {
 	burst := 5
 	ttlMs := 60000
 
-	result, err := s.Eval(ctx, store.GCRAScript,
+	result, err := s.Eval(ctx, store.GCRAScriptID,
 		[]string{"gcra_test"},
 		emissionIntervalNs, burst, 1, nowNs, ttlMs,
 	)

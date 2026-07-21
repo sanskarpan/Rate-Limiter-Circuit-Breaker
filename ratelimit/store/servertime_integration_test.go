@@ -79,7 +79,7 @@ func TestRedis_ServerTime_TokenBucket_IgnoresClientSkew(t *testing.T) {
 	drain := func(s *store.Redis, nowNs int64) int {
 		allowed := 0
 		for i := 0; i < 5; i++ {
-			res, err := s.Eval(ctx, store.TokenBucketScript,
+			res, err := s.Eval(ctx, store.TokenBucketScriptID,
 				[]string{"k"}, capacity, refillRate, 1, nowNs, ttlMs, 1,
 			)
 			if err != nil {
@@ -98,7 +98,7 @@ func TestRedis_ServerTime_TokenBucket_IgnoresClientSkew(t *testing.T) {
 	// Now immediately request again with a +10s skewed client clock. In
 	// server-time mode the script ignores skewedNow and uses the (barely-advanced)
 	// Redis clock, so almost no refill has happened and the request is DENIED.
-	res, err := srvStore.Eval(ctx, store.TokenBucketScript,
+	res, err := srvStore.Eval(ctx, store.TokenBucketScriptID,
 		[]string{"k"}, capacity, refillRate, 1, skewedNow, ttlMs, 1,
 	)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestRedis_ServerTime_TokenBucket_IgnoresClientSkew(t *testing.T) {
 	if got := drain(cliStore, realNow); got != 5 {
 		t.Fatalf("client-time: expected to drain 5 tokens, got %d", got)
 	}
-	res2, err := cliStore.Eval(ctx, store.TokenBucketScript,
+	res2, err := cliStore.Eval(ctx, store.TokenBucketScriptID,
 		[]string{"k"}, capacity, refillRate, 1, skewedNow, ttlMs, 0,
 	)
 	if err != nil {
@@ -132,15 +132,15 @@ func TestRedis_ServerTime_ReplicateCommands_NoError(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UnixNano()
 
-	if _, err := s.Eval(ctx, store.TokenBucketScript,
+	if _, err := s.Eval(ctx, store.TokenBucketScriptID,
 		[]string{"rc:tb"}, 5.0, 1.0/float64(time.Second), 1, now, 60000, 1); err != nil {
 		t.Fatalf("token bucket server-time eval: %v", err)
 	}
-	if _, err := s.Eval(ctx, store.GCRAScript,
+	if _, err := s.Eval(ctx, store.GCRAScriptID,
 		[]string{"rc:gcra"}, int64(time.Second), 5, 1, now, 60000, 1); err != nil {
 		t.Fatalf("gcra server-time eval: %v", err)
 	}
-	if _, err := s.Eval(ctx, store.SlidingWindowLogScript,
+	if _, err := s.Eval(ctx, store.SlidingWindowLogScriptID,
 		[]string{"rc:swl"}, 5, int64(time.Second), now, "id", 60000, 1, 1); err != nil {
 		t.Fatalf("sliding window log server-time eval: %v", err)
 	}

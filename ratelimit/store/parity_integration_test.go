@@ -58,8 +58,8 @@ func TestParity_GCRA_RedisVsEmulation(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		now := base + int64(i)*(emission/3)
 		args := []any{emission, burst, int64(1), now, int64(10000)}
-		rres, rerr := r.Eval(ctx, store.GCRAScript, []string{"k"}, args...)
-		mres, merr := m.Eval(ctx, store.GCRAScript, []string{"k"}, args...)
+		rres, rerr := r.Eval(ctx, store.GCRAScriptID, []string{"k"}, args...)
+		mres, merr := m.Eval(ctx, store.GCRAScriptID, []string{"k"}, args...)
 		if ra, ma := allowedOf(rres, rerr), allowedOf(mres, merr); ra != ma {
 			t.Fatalf("GCRA parity mismatch at i=%d now=%d: redis allowed=%d, emulation allowed=%d", i, now, ra, ma)
 		}
@@ -78,8 +78,8 @@ func TestParity_SlidingLog_RedisVsEmulation(t *testing.T) {
 		now := base + int64(i)*(window/9)
 		entryID := fmt.Sprintf("e-%d", i)
 		args := []any{limit, window, now, entryID, int64(2000), int64(1)}
-		rres, rerr := r.Eval(ctx, store.SlidingWindowLogScript, []string{"k"}, args...)
-		mres, merr := m.Eval(ctx, store.SlidingWindowLogScript, []string{"k"}, args...)
+		rres, rerr := r.Eval(ctx, store.SlidingWindowLogScriptID, []string{"k"}, args...)
+		mres, merr := m.Eval(ctx, store.SlidingWindowLogScriptID, []string{"k"}, args...)
 		if ra, ma := allowedOf(rres, rerr), allowedOf(mres, merr); ra != ma {
 			t.Fatalf("SWL parity mismatch at i=%d now=%d: redis allowed=%d, emulation allowed=%d", i, now, ra, ma)
 		}
