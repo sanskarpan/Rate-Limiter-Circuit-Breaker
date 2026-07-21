@@ -309,7 +309,6 @@ func (r *Redis) IncrBy(ctx context.Context, key string, delta int64, ttl time.Du
 	return v, nil
 }
 
-
 // ---------------------------------------------------------------------------
 // ScriptID constants — typed identifiers for every Eval script
 // ---------------------------------------------------------------------------
@@ -363,16 +362,17 @@ var (
 // scriptBodies maps each ScriptID.name to its Lua body string. Redis.Eval
 // looks up the body here; callers pass ScriptIDs and never see raw Lua.
 var scriptBodies = map[string]string{
-	TokenBucketScriptID.name:          TokenBucketScript,
-	FixedWindowScriptID.name:          FixedWindowScript,
-	GCRAScriptID.name:                 GCRAScript,
-	LeakyBucketScriptID.name:          LeakyBucketScript,
-	SlidingWindowLogScriptID.name:     SlidingWindowLogScript,
-	SlidingWindowCounterScriptID.name: SlidingWindowCounterScript,
+	TokenBucketScriptID.name:           TokenBucketScript,
+	FixedWindowScriptID.name:           FixedWindowScript,
+	GCRAScriptID.name:                  GCRAScript,
+	LeakyBucketScriptID.name:           LeakyBucketScript,
+	SlidingWindowLogScriptID.name:      SlidingWindowLogScript,
+	SlidingWindowCounterScriptID.name:  SlidingWindowCounterScript,
 	CircuitBreakerAcquireScriptID.name: CircuitBreakerAcquireScript,
 	CircuitBreakerRecordScriptID.name:  CircuitBreakerRecordScript,
 	CircuitBreakerReadScriptID.name:    CircuitBreakerReadScript,
 }
+
 // Eval executes the Lua script identified by scriptID atomically on Redis.
 //
 // scriptID must be one of the package-level ScriptID constants; the ScriptID is

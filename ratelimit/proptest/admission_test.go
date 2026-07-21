@@ -291,7 +291,7 @@ func TestPropertySlidingWindowCounterAdmission(t *testing.T) {
 		window := time.Duration(rapid.IntRange(1, 10).Draw(t, "windowSec")) * time.Second
 		clk := clock.NewManualClock(epoch)
 		lim := slidingwindow.NewCounter(limit, window,
-			slidingwindow.WithCounterClock(clk),
+			slidingwindow.WithClock(clk),
 		)
 		defer lim.Close()
 

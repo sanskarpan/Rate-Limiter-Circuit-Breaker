@@ -8,9 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+
 // distributedAlgorithmName is the algorithm label emitted in Result fields.
 const distributedAlgorithmName = "distributed_token_bucket"
-
 
 // DistributedTokenBucket is a Redis-backed token bucket.
 // It uses a Lua script for atomic read-refill-consume operations.

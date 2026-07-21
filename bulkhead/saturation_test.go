@@ -25,7 +25,7 @@ func newAtomicClock(start time.Time) *atomicClock {
 	return c
 }
 
-func (c *atomicClock) Now() time.Time { return time.Unix(0, c.ns.Load()) }
+func (c *atomicClock) Now() time.Time      { return time.Unix(0, c.ns.Load()) }
 func (c *atomicClock) Add(d time.Duration) { c.ns.Add(int64(d)) }
 
 // waitForInt polls fn until it returns want or the deadline elapses. It returns

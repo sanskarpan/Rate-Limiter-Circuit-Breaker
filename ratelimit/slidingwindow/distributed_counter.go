@@ -8,9 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+
 // distributedCounterAlgorithmName is the algorithm label emitted in Result fields.
 const distributedCounterAlgorithmName = "distributed_sliding_window_counter"
-
 
 // DistributedSlidingWindowCounter approximates a sliding window using two fixed-window
 // counters. The formula is:

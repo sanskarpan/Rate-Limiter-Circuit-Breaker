@@ -102,7 +102,7 @@ func syncFactories() []limiterFactory {
 				limit := 7
 				window := 3 * time.Second
 				return slidingwindow.NewCounter(limit, window,
-						slidingwindow.WithCounterClock(clk)),
+						slidingwindow.WithClock(clk)),
 					limiterConfig{
 						unit: window, maxRemaining: limit, freshBurst: limit,
 						// Eviction at idle >= 5*window; stay well under it.

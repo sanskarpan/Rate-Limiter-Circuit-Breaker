@@ -9,9 +9,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+
 // distributedLogAlgorithmName is the algorithm label emitted in Result fields.
 const distributedLogAlgorithmName = "distributed_sliding_window_log"
-
 
 // DistributedSlidingWindowLog is a Redis sorted set-backed sliding window log.
 // Uses ZADD + ZCOUNT + ZREMRANGEBYSCORE in a Lua script for atomicity.

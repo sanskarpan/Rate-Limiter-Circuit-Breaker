@@ -8,9 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+
 // distributedAlgorithmName is the algorithm label emitted in Result fields.
 const distributedAlgorithmName = "distributed_fixed_window"
-
 
 // DistributedFixedWindow is a Redis-backed fixed window counter.
 // Uses atomic INCR + EXPIRE for O(1) performance.

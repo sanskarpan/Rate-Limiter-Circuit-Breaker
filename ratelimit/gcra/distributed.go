@@ -8,9 +8,9 @@ import (
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit"
 	"github.com/sanskarpan/Rate-Limiter-Circuit-Breaker/ratelimit/store"
 )
+
 // distributedAlgorithmName is the algorithm label emitted in Result fields.
 const distributedAlgorithmName = "distributed_gcra"
-
 
 // DistributedGCRA is a Redis-backed GCRA (Generic Cell Rate Algorithm) limiter.
 // Uses the Lua GCRAScript for atomic TAT updates.
