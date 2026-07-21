@@ -153,13 +153,12 @@ brews:
     repository:
       owner: sanskarpan
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}{{ else }}none{{ end }}"
+    skip_upload: "{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}"
     directory: Formula
     homepage: "https://github.com/sanskarpan/Rate-Limiter-Circuit-Breaker"
     description: "Demo server for the Resilience Go rate-limiting & circuit-breaking toolkit."
     license: "MIT"
-    # Don't publish the formula for prereleases / snapshots.
-    skip_upload: auto
     commit_author:
       name: goreleaser-bot
       email: goreleaser@users.noreply.github.com
